@@ -139,7 +139,7 @@ const cartTotal = 0;
   // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
       const config = await response.json();
       
       if (config.theme?.daisy) {
@@ -147,7 +147,7 @@ const cartTotal = 0;
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }

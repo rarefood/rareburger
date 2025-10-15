@@ -281,7 +281,7 @@ if (!commandeId) {
 
   async function loadCommande() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${commandeId}`);
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${commandeId}`);
       
       if (!response.ok) {
         throw new Error('Commande introuvable');
@@ -386,7 +386,7 @@ if (!commandeId) {
     }
 
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${commandeId}`, {
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${commandeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedCommande)
@@ -412,7 +412,7 @@ if (!commandeId) {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) return;
 
     try {
-      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${commandeId}`, {
+      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${commandeId}`, {
         method: 'DELETE'
       });
       alert('Commande supprimée');
@@ -425,7 +425,7 @@ if (!commandeId) {
 
   async function printCommande() {
     try {
-      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${commandeId}/print`, {
+      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${commandeId}/print`, {
         method: 'POST'
       });
       alert('Commande envoyée à l\'imprimante');

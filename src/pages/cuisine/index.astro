@@ -301,7 +301,7 @@ if (!token) {
   // Charger config et thème
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
       const config = await response.json();
       
       if (config.theme?.daisy) {
@@ -309,7 +309,7 @@ if (!token) {
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
         const favicon = document.getElementById('favicon');
         const navLogo = document.getElementById('navLogo');
         if (favicon) favicon.href = logoUrl;
@@ -376,7 +376,7 @@ async function loadCommandes(silent = false) {
   }
 
   try {
-    const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes`);
+    const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes`);
     const data = await response.json();
     
     // ✅ NOUVEAU : Filtrer les commandes
@@ -610,7 +610,7 @@ async function loadCommandes(silent = false) {
     const newStatut = document.getElementById('modalStatut').value;
 
     try {
-      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}`, {
+      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -629,7 +629,7 @@ async function loadCommandes(silent = false) {
   // Imprimer ticket
   document.getElementById('imprimerTicket').addEventListener('click', async () => {
     try {
-      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}/print`, {
+      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}/print`, {
         method: 'POST'
       });
       alert('Ticket envoyé à l\'imprimante');

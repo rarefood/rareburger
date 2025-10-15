@@ -238,7 +238,7 @@ if (!token) {
   // Charger config
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
       const config = await response.json();
       
       if (config.theme?.daisy) {
@@ -246,7 +246,7 @@ if (!token) {
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }
@@ -285,7 +285,7 @@ if (!token) {
   // Charger historique
   async function loadHistorique() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes`);
+      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes`);
       const data = await response.json();
       
       // Filtrer: mes livraisons terminées

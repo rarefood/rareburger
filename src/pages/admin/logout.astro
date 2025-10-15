@@ -54,7 +54,7 @@ Astro.cookies.delete('admin_token', { path: '/' });
     // Charger le thème
     async function loadConfig() {
       try {
-        const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+        const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
         const config = await response.json();
         
         if (config.theme?.daisy) {
@@ -62,7 +62,7 @@ Astro.cookies.delete('admin_token', { path: '/' });
         }
         
         if (config.theme?.logo) {
-          const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+          const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
           const favicon = document.getElementById('favicon');
           if (favicon) favicon.href = logoUrl;
         }

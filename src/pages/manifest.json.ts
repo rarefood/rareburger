@@ -4,7 +4,7 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 
 const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
 
 export const GET: APIRoute = async () => {
   try {

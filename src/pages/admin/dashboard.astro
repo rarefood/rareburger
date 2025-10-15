@@ -170,7 +170,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
   async function loadDashboard() {
     try {
       // Charger stats
-      const statsResponse = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/stats`);
+      const statsResponse = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/stats`);
       const stats = await statsResponse.json();
 
       document.getElementById('todayOrders').textContent = stats.today_orders || 0;
@@ -179,7 +179,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
       document.getElementById('averageOrder').textContent = formatPrice(stats.average_order || 0);
 
       // Charger commandes récentes
-      const commandesResponse = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes`);
+      const commandesResponse = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes`);
       const commandesData = await commandesResponse.json();
       const recentOrders = (commandesData.commandes || [])
         .sort((a, b) => new Date(b.date_creation) - new Date(a.date_creation))

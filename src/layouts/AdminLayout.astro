@@ -34,7 +34,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
   <script define:vars={{ RESTAURANT_ID }}>
     async function loadConfig() {
       try {
-        const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+        const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
         const config = await response.json();
         
         // Appliquer le thème DaisyUI
@@ -44,7 +44,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
         
         // Construire l'URL complète du logo
         if (config.theme?.logo) {
-          const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+          const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
           const favicon = document.getElementById('favicon');
           if (favicon) {
             favicon.href = logoUrl;

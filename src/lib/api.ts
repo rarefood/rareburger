@@ -6,7 +6,7 @@
 // ============================================
 // 🎯 CONFIGURATION - Change ici le restaurant !
 // ============================================
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
 const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
 
 // Helper pour obtenir le restaurant ID

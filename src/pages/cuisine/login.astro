@@ -118,7 +118,7 @@ if (token) {
     // Charger le thème et logo
     async function loadConfig() {
       try {
-        const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+        const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
         const config = await response.json();
         
         if (config.theme?.daisy) {
@@ -126,7 +126,7 @@ if (token) {
         }
         
         if (config.theme?.logo) {
-          const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+          const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
           const favicon = document.getElementById('favicon');
           const logoImage = document.getElementById('logoImage');
           if (favicon) favicon.href = logoUrl;
@@ -171,7 +171,7 @@ if (token) {
 
       try {
         // Récupérer la config pour vérifier les chefs
-        const configResponse = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+        const configResponse = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
         const config = await configResponse.json();
 
         // Vérifier si le chef existe

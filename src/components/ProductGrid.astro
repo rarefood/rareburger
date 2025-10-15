@@ -116,7 +116,7 @@ try {
         // Construire les URLs complètes des images
         const images = (product.images || []).map((img: string) => {
           if (img.startsWith('http')) return img;
-          const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+          const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
           const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
           return `${apiUrl}/images/${restaurantId}/${img}`;
         });

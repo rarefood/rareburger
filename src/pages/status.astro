@@ -8,7 +8,7 @@ import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
 const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
 ---
 
 <!DOCTYPE html>
@@ -140,7 +140,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api'
   // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/${restaurantId}/config`);
+      const response = await fetch(`https://api.rareburger.be/api/${restaurantId}/config`);
       const config = await response.json();
       
       if (config.theme?.daisy) {
@@ -148,7 +148,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api'
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.cmdola.be/api/images/${restaurantId}/${config.theme.logo}`;
+        const logoUrl = `https://api.rareburger.be/api/images/${restaurantId}/${config.theme.logo}`;
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }

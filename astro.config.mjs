@@ -1,5 +1,13 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig } from "astro/config";
+import tailwindcss from "@tailwindcss/vite";
+import netlify from "@astrojs/netlify/functions"; 
+// ou "@astrojs/netlify/edge-functions" si tu veux du Edge
 
-// https://astro.build/config
-export default defineConfig({});
+export default defineConfig({
+  vite: {
+    plugins: [tailwindcss()],
+  },
+  output: "server", // ou "hybrid" si tu as à la fois du statique + SSR
+  adapter: netlify(),
+});

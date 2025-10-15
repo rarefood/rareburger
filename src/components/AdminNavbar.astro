@@ -1,0 +1,124 @@
+---
+// src/components/AdminNavbar.astro
+const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+---
+
+<nav class="navbar bg-base-100 shadow-lg">
+  
+  <div class="navbar-start">
+    <div class="dropdown">
+      <label tabindex="0" class="btn btn-ghost lg:hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+        </svg>
+      </label>
+      <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-100 rounded-box w-52">
+        <li><a href="/admin/dashboard">Dashboard</a></li>
+        <li><a href="/admin/commandes">Commandes <span class="badge badge-sm badge-primary" id="mobilePendingBadge">0</span></a></li>
+        <li><a href="/admin/menu">Menu</a></li>
+        <li><a href="/admin/config">Configuration</a></li>
+        <div class="divider my-1"></div>
+        <li><a href="/admin/logout">Se déconnecter</a></li>
+      </ul>
+    </div>
+    
+    <a href="/admin/dashboard" class="btn btn-ghost text-xl">
+      <img src="/favicon.ico" alt="Logo" class="w-8 h-8" id="navbarLogo" />
+      <span class="hidden sm:inline" id="navbarTitle">CMDOLA Admin</span>
+    </a>
+  </div>
+  
+  <div class="navbar-center hidden lg:flex">
+    <ul class="menu menu-horizontal px-1">
+      <li><a href="/admin/dashboard">Dashboard</a></li>
+      <li>
+        <a href="/admin/commandes">
+          Commandes
+          <span class="badge badge-sm badge-primary" id="desktopPendingBadge">0</span>
+        </a>
+      </li>
+      <li><a href="/admin/menu">Menu</a></li>
+      <li><a href="/admin/config">Configuration</a></li>
+    </ul>
+  </div>
+  
+  <div class="navbar-end gap-2">
+    <div class="dropdown dropdown-end">
+      <label tabindex="0" class="btn btn-ghost btn-circle avatar">
+        <div class="w-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
+          <span class="text-xl">👤</span>
+        </div>
+      </label>
+      <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-100 rounded-box w-52">
+        <li><a href="/" target="_blank">Voir le site</a></li>
+        <li><a href="/admin/logout">Se déconnecter</a></li>
+      </ul>
+    </div>
+  </div>
+
+</nav>
+
+<script define:vars={{ RESTAURANT_ID }}>
+  // Mettre à jour les infos du restaurant
+  async function updateNavbar() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const config = await response.json();
+      
+      if (config.nom) {
+        const title = document.getElementById('navbarTitle');
+        if (title) title.textContent = config.nom + ' Admin';
+      }
+      
+      if (config.theme?.logo) {
+        // Construire l'URL complète du logo
+        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logo = document.getElementById('navbarLogo');
+        if (logo) logo.src = logoUrl;
+      }
+    } catch (error) {
+      console.error('Erreur navbar:', error);
+    }
+  }
+
+  // Mettre à jour les badges de commandes en attente
+  async function updatePendingBadges() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/commandes`);
+      const data = await response.json();
+      
+      const pending = (data.commandes || []).filter(c => 
+        c.statut === 'nouvelle' || c.statut === 'en_preparation'
+      ).length;
+      
+      const desktopBadge = document.getElementById('desktopPendingBadge');
+      const mobileBadge = document.getElementById('mobilePendingBadge');
+      
+      if (desktopBadge) {
+        desktopBadge.textContent = pending;
+        if (pending > 0) {
+          desktopBadge.classList.add('badge-warning');
+        } else {
+          desktopBadge.classList.remove('badge-warning');
+        }
+      }
+      if (mobileBadge) {
+        mobileBadge.textContent = pending;
+        if (pending > 0) {
+          mobileBadge.classList.add('badge-warning');
+        } else {
+          mobileBadge.classList.remove('badge-warning');
+        }
+      }
+    } catch (error) {
+      console.error('Erreur badges:', error);
+    }
+  }
+
+  // Charger au démarrage
+  updateNavbar();
+  updatePendingBadges();
+  
+  // Rafraîchir les badges toutes les 30 secondes
+  setInterval(updatePendingBadges, 30000);
+</script>

@@ -1,0 +1,399 @@
+---
+// src/pages/status.astro
+// ============================================
+// 📍 CMDOLA - Suivi de commande
+// ============================================
+
+import Navbar from '../components/Navbar.astro';
+import '../assets/app.css';
+
+const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+---
+
+<!DOCTYPE html>
+<html lang="fr" data-theme="autumn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suivi de commande - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+</head>
+
+<body class="bg-base-200 min-h-screen">
+  
+  <Navbar />
+  
+  <div class="container mx-auto px-4 py-8">
+    
+    <h1 class="text-3xl font-bold mb-6">Suivi de commande</h1>
+
+    <!-- Recherche de commande -->
+    <div id="search-section" class="card bg-base-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">Entrez votre numéro de commande</h2>
+        <p class="text-base-content/70 mb-4">Vous pouvez le trouver sur votre email de confirmation ou la page de confirmation</p>
+        
+        <form id="search-form" class="flex gap-2">
+          <input 
+            type="text" 
+            id="order-number-input"
+            placeholder="Ex: RARE-BURGER042" 
+            class="input input-bordered flex-1"
+            required
+          />
+          <button type="submit" class="btn btn-primary">
+            <span class="btn-text">Rechercher</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Affichage du statut -->
+    <div id="status-section" style="display: none;">
+      
+      <!-- Info commande -->
+      <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body">
+          <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h2 class="text-2xl font-bold" id="order-numero">Chargement...</h2>
+              <p class="text-base-content/60" id="order-date"></p>
+            </div>
+            <button id="change-order-btn" class="btn btn-ghost btn-sm">
+              Voir une autre commande
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timeline des statuts -->
+      <div class="card bg-base-100 shadow-sm mb-6">
+        <div class="card-body">
+          <h3 class="card-title mb-6">État de votre commande</h3>
+          
+          <ul class="timeline timeline-vertical" id="status-timeline">
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          </ul>
+          
+          <div class="alert alert-info mt-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="text-sm">Cette page se met à jour automatiquement toutes les 30 secondes</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Détails commande -->
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">Détails de la commande</h3>
+          <div class="divider my-2"></div>
+          
+          <div id="order-details" class="space-y-2">
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</body>
+</html>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  .status-active {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .status-icon {
+    transition: transform 0.3s ease;
+  }
+
+  .status-completed .status-icon {
+    animation: bounce 0.6s ease;
+  }
+
+  .timeline li {
+    transition: all 0.3s ease;
+  }
+</style>
+
+<script define:vars={{ restaurantId, apiBaseUrl }}>
+  // Charger le thème et logo dynamiquement
+  async function loadConfig() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${restaurantId}/config`);
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `https://api.cmdola.be/api/images/${restaurantId}/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
+      }
+    } catch (error) {
+      console.error('Erreur config:', error);
+    }
+  }
+
+  loadConfig();
+
+  const urlParams = new URLSearchParams(window.location.search);
+  let currentIdentifier = urlParams.get('numero') || urlParams.get('order');
+  let pollingInterval = null;
+
+  const statusConfig = {
+    'nouvelle': {
+      label: 'Commande reçue',
+      icon: '📝',
+      color: 'primary',
+      description: 'Votre commande a été enregistrée'
+    },
+    'en_preparation': {
+      label: 'En préparation',
+      icon: '👨‍🍳',
+      color: 'warning',
+      description: 'Votre commande est en cours de préparation'
+    },
+    'prete': {
+      label: 'Prête',
+      icon: '✅',
+      color: 'success',
+      description: 'Votre commande est prête'
+    },
+    'en_livraison': {
+      label: 'En livraison',
+      icon: '🚗',
+      color: 'info',
+      description: 'Votre commande est en route'
+    },
+    'livree': {
+      label: 'Livrée',
+      icon: '🎉',
+      color: 'success',
+      description: 'Votre commande a été livrée'
+    },
+    'terminee': {
+      label: 'Terminée',
+      icon: '✅',
+      color: 'success',
+      description: 'Votre commande est terminée'
+    },
+    'annulee': {
+      label: 'Annulée',
+      icon: '❌',
+      color: 'error',
+      description: 'Votre commande a été annulée'
+    }
+  };
+
+  const statusOrder = ['nouvelle', 'en_preparation', 'prete', 'en_livraison', 'livree', 'terminee'];
+
+  function formatDate(isoDate) {
+    const date = new Date(isoDate);
+    return new Intl.DateTimeFormat('fr-BE', {
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  function formatPrice(price) {
+    return new Intl.NumberFormat('fr-BE', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(price);
+  }
+
+  async function loadOrder(identifier) {
+    try {
+      console.log('Chargement commande:', identifier);
+      const url = `${apiBaseUrl}/${restaurantId}/commandes/${identifier}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Commande introuvable');
+      }
+      
+      const order = await response.json();
+      console.log('Commande chargée:', order);
+      displayOrder(order);
+      return true;
+    } catch (error) {
+      console.error('Erreur:', error);
+      alert('Commande introuvable. Vérifiez le numéro et réessayez.');
+      document.getElementById('search-section').style.display = 'block';
+      document.getElementById('status-section').style.display = 'none';
+      return false;
+    }
+  }
+
+  function displayOrder(order) {
+    document.getElementById('order-numero').textContent = `Commande #${order.numero}`;
+    document.getElementById('order-date').textContent = formatDate(order.date_creation);
+    
+    renderTimeline(order.statut, order.type);
+    
+    const detailsContainer = document.getElementById('order-details');
+    const deliveryType = order.type === 'livraison' ? 'Livraison' : order.type === 'emporter' ? 'À emporter' : 'Sur place';
+    
+    let detailsHTML = `
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Type</span>
+        <span class="font-semibold capitalize">${deliveryType}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Articles</span>
+        <span class="font-semibold">${order.articles.reduce((sum, item) => sum + item.quantite, 0)}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Total</span>
+        <span class="font-semibold">${formatPrice(order.prix_total)}</span>
+      </div>
+    `;
+
+    if (order.temps_estime) {
+      detailsHTML += `
+        <div class="flex justify-between">
+          <span class="text-base-content/70">Temps estimé</span>
+          <span class="font-semibold">${order.temps_estime}</span>
+        </div>
+      `;
+    }
+
+    detailsContainer.innerHTML = detailsHTML;
+  }
+
+  function renderTimeline(currentStatus, orderType) {
+    const timeline = document.getElementById('status-timeline');
+    
+    let steps = [...statusOrder];
+    if (orderType !== 'livraison') {
+      steps = steps.filter(s => s !== 'en_livraison' && s !== 'livree');
+    }
+    
+    const currentIndex = steps.indexOf(currentStatus);
+    
+    timeline.innerHTML = steps.map((status, index) => {
+      const config = statusConfig[status];
+      const isCompleted = index < currentIndex;
+      const isCurrent = index === currentIndex;
+      const isUpcoming = index > currentIndex;
+      
+      let classes = 'timeline-box';
+      if (isCompleted) classes += ' timeline-completed border-success';
+      if (isCurrent) classes += ' border-primary status-active';
+      
+      return `
+        <li class="${isCompleted ? 'status-completed' : ''}">
+          <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
+          <div class="timeline-middle">
+            <div class="status-icon text-2xl ${isCurrent ? 'status-active' : ''}">
+              ${config.icon}
+            </div>
+          </div>
+          <div class="timeline-end mb-10">
+            <div class="${classes}">
+              <div class="font-bold ${isCurrent ? 'text-primary' : isCompleted ? 'text-success' : 'text-base-content/60'}">
+                ${config.label}
+              </div>
+              <p class="text-sm ${isUpcoming ? 'text-base-content/50' : ''}">
+                ${config.description}
+              </p>
+            </div>
+          </div>
+          <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
+        </li>
+      `;
+    }).join('');
+  }
+
+  const searchForm = document.getElementById('search-form');
+  if (searchForm) {
+    searchForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('order-number-input');
+      const orderNumber = input ? input.value.trim() : '';
+      
+      if (!orderNumber) return;
+      
+      const btn = e.target.querySelector('button[type="submit"]');
+      const btnText = btn.querySelector('.btn-text');
+      btnText.textContent = 'Recherche...';
+      btn.disabled = true;
+      
+      currentIdentifier = orderNumber;
+      const success = await loadOrder(orderNumber);
+      
+      if (success) {
+        document.getElementById('search-section').style.display = 'none';
+        document.getElementById('status-section').style.display = 'block';
+        startPolling();
+      }
+      
+      btnText.textContent = 'Rechercher';
+      btn.disabled = false;
+    });
+  }
+
+  const changeOrderBtn = document.getElementById('change-order-btn');
+  if (changeOrderBtn) {
+    changeOrderBtn.addEventListener('click', () => {
+      stopPolling();
+      currentIdentifier = null;
+      document.getElementById('search-section').style.display = 'block';
+      document.getElementById('status-section').style.display = 'none';
+      const input = document.getElementById('order-number-input');
+      if (input) input.value = '';
+    });
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollingInterval = setInterval(() => {
+      if (currentIdentifier) {
+        console.log('Mise à jour automatique...');
+        loadOrder(currentIdentifier);
+      }
+    }, 30000);
+  }
+
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+
+  if (currentIdentifier && currentIdentifier !== 'null' && currentIdentifier !== '') {
+    console.log('Chargement auto:', currentIdentifier);
+    document.getElementById('search-section').style.display = 'none';
+    document.getElementById('status-section').style.display = 'block';
+    loadOrder(currentIdentifier);
+    startPolling();
+  }
+
+  window.addEventListener('beforeunload', stopPolling);
+</script>

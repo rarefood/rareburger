@@ -1,7 +1,7 @@
 {
-  "name": "rareburger",
+  "name": "cmdola-lasted",
   "type": "module",
-  "version": "0.0.1",
+  "version": "V3.1",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -9,6 +9,11 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^5.14.5"
+    "@astrojs/netlify": "^6.5.11",
+    "@tailwindcss/vite": "^4.1.13",
+    "astro": "^5.14.5",
+    "daisyui": "^5.1.25",
+    "jspdf": "^3.0.3",
+    "tailwindcss": "^4.1.13"
   }
 }

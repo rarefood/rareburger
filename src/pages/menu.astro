@@ -1,0 +1,226 @@
+---
+// src/pages/menu.astro
+// ============================================
+// 🍽️ CMDOLA - Page Menu Complète
+// ============================================
+
+import Navbar from '../components/Navbar.astro';
+import CategorySelector from '../components/CategorySelector.astro';
+import ProductGrid from '../components/ProductGrid.astro';
+import { api } from '../lib/api';
+import "../assets/app.css";
+
+const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+
+// Récupérer les suppléments et la config
+let supplements = [];
+let config: any = {};
+let isOpen = true;
+let nextOpening = '';
+let currentSchedule: any[] = [];
+
+try {
+  const menu = await api.menu.get();
+  supplements = menu.supplements || [];
+  
+  // Charger la config pour les horaires
+  config = await api.config.get();
+  
+  // Vérifier si le restaurant est ouvert
+  const now = new Date();
+  const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+  const currentDay = dayNames[now.getDay()];
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  
+  currentSchedule = config.horaires?.[currentDay] || [];
+  
+  // Vérifier si l'heure actuelle est dans une des plages
+  isOpen = currentSchedule.some((plage: any) => {
+    return currentTime >= plage.debut && currentTime <= plage.fin;
+  });
+  
+  // Si fermé, trouver la prochaine ouverture
+  if (!isOpen && currentSchedule.length > 0) {
+    const nextSlot = currentSchedule.find((plage: any) => currentTime < plage.debut);
+    if (nextSlot) {
+      nextOpening = `Ouverture aujourd'hui à ${nextSlot.debut}`;
+    } else {
+      // Chercher le lendemain
+      const tomorrowIndex = (now.getDay() + 1) % 7;
+      const tomorrowDay = dayNames[tomorrowIndex];
+      const tomorrowSchedule = config.horaires?.[tomorrowDay] || [];
+      if (tomorrowSchedule.length > 0) {
+        const dayNamesFr = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+        nextOpening = `Ouverture ${dayNamesFr[tomorrowIndex]} à ${tomorrowSchedule[0].debut}`;
+      }
+    }
+  }
+  
+} catch (error) {
+  console.error('Erreur chargement:', error);
+  supplements = [];
+}
+
+const cartItems = 0;
+const cartTotal = 0;
+---
+
+<!DOCTYPE html>
+<html lang="fr" data-theme="autumn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menu - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+  
+  <!-- Charger les suppléments IMMÉDIATEMENT -->
+  <script is:inline define:vars={{ supplements }}>
+    if (typeof window !== 'undefined') {
+      window.allSupplements = supplements || [];
+    }
+  </script>
+</head>
+
+<body class="bg-base-200 min-h-screen">
+  
+  <!-- Navigation -->
+  <Navbar 
+    cartItems={cartItems}
+    cartTotal={cartTotal}
+  />
+  
+  <!-- Alert si restaurant fermé -->
+  {!isOpen && (
+    <div class="container mx-auto px-4 mt-4">
+      <div class="alert alert-warning shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <div>
+          <h3 class="font-bold">Restaurant actuellement fermé</h3>
+          <div class="text-sm">{nextOpening || 'Consultez nos horaires'}</div>
+        </div>
+      </div>
+    </div>
+  )}
+  
+  <!-- Sélecteur de catégories -->
+  <CategorySelector 
+    selectedCategory="all"
+  />
+  
+  <!-- Grille de produits -->
+  <ProductGrid 
+    category="all"
+  />
+  
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast toast-top toast-end z-50"></div>
+
+</body>
+</html>
+
+<style>
+  body {
+    animation: fadeIn 0.3s ease-in;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+</style>
+
+<script define:vars={{ isOpen, RESTAURANT_ID }}>
+  // Charger le thème et logo dynamiquement
+  async function loadConfig() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
+      }
+    } catch (error) {
+      console.error('Erreur config:', error);
+    }
+  }
+
+  loadConfig();
+
+  // Mise à jour du badge panier
+  function updateCartBadge() {
+    const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    const totalItems = cart.reduce((sum, item) => sum + item.quantite, 0);
+    const totalPrice = cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+    
+    const badge = document.querySelector('.indicator-item');
+    if (badge) {
+      badge.textContent = totalItems.toString();
+      badge.style.display = totalItems > 0 ? 'inline-flex' : 'none';
+    }
+    
+    const itemsText = document.querySelector('.card-body .text-lg');
+    if (itemsText) {
+      itemsText.textContent = `${totalItems} Article${totalItems > 1 ? 's' : ''}`;
+    }
+    
+    const priceText = document.querySelector('.card-body .text-info');
+    if (priceText) {
+      const formatted = new Intl.NumberFormat('fr-BE', {
+        style: 'currency',
+        currency: 'EUR',
+      }).format(totalPrice);
+      priceText.textContent = `Sous-total: ${formatted}`;
+    }
+  }
+
+  document.addEventListener('astro:page-load', () => {
+    updateCartBadge();
+  });
+
+  window.addEventListener('cart-updated', updateCartBadge);
+
+  // Bloquer les commandes si restaurant fermé
+  if (!isOpen) {
+    // Désactiver tous les boutons d'ajout
+    setTimeout(() => {
+      document.querySelectorAll('.btn-primary').forEach(btn => {
+        if (btn.textContent.includes('Voir détails')) {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-disabled');
+          btn.disabled = true;
+          btn.textContent = 'Restaurant fermé';
+        }
+      });
+    }, 100);
+    
+    // Empêcher l'ouverture des modals
+    const originalOpenModal = window.openProductModal;
+    window.openProductModal = function() {
+      alert('Le restaurant est actuellement fermé. Les commandes seront disponibles lors de notre prochaine ouverture.');
+    };
+  }
+
+  // Changement de thème (Ctrl+T)
+  const themes = ['light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 'synthwave', 'cyberpunk'];
+  let currentThemeIndex = 0;
+
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 't') {
+      e.preventDefault();
+      currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+      document.documentElement.setAttribute('data-theme', themes[currentThemeIndex]);
+    }
+  });
+</script>

@@ -1,0 +1,297 @@
+---
+// src/pages/cart.astro
+// ============================================
+// 🛒 CMDOLA - Page Panier
+// ============================================
+
+import Navbar from '../components/Navbar.astro';
+import { api } from '../lib/api';
+import '../assets/app.css';
+
+const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+
+// Récupérer config (pour plus tard au checkout)
+let config: any = {};
+try {
+  config = await api.config.get();
+} catch (error) {
+  console.error('Erreur config:', error);
+}
+---
+
+<!DOCTYPE html>
+<html lang="fr" data-theme="autumn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panier - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+</head>
+
+<body class="bg-base-200 min-h-screen">
+  
+  <!-- Navigation -->
+  <Navbar />
+  
+  <!-- Contenu panier -->
+  <div class="container mx-auto px-4 py-8">
+    
+    <!-- Titre -->
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-bold">Mon Panier</h1>
+      <button id="clear-cart-btn" class="btn btn-ghost btn-sm text-error">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+        Vider le panier
+      </button>
+    </div>
+
+    <!-- Grid 2 colonnes : articles + résumé -->
+    <div class="grid lg:grid-cols-3 gap-6">
+      
+      <!-- Articles (2/3) -->
+      <div class="lg:col-span-2">
+        <div id="cart-items" class="space-y-4">
+          <!-- Rempli par JavaScript -->
+          <div class="flex justify-center py-12">
+            <span class="loading loading-spinner loading-lg"></span>
+          </div>
+        </div>
+        
+        <!-- Message panier vide -->
+        <div id="empty-cart" class="card bg-base-100 shadow-sm" style="display: none;">
+          <div class="card-body text-center py-12">
+            <div class="text-6xl mb-4">🛒</div>
+            <h2 class="text-2xl font-bold mb-2">Votre panier est vide</h2>
+            <p class="text-base-content/60 mb-6">Ajoutez des produits pour commencer</p>
+            <a href="/menu" class="btn btn-primary">
+              Voir le menu
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Résumé commande (1/3) -->
+      <div class="lg:col-span-1">
+        <div class="card bg-base-100 shadow-sm sticky top-4">
+          <div class="card-body">
+            <h2 class="card-title">Résumé</h2>
+            <div class="divider my-2"></div>
+            
+            <!-- Détails -->
+            <div class="space-y-3">
+              <div class="flex justify-between">
+                <span>Sous-total</span>
+                <span id="subtotal" class="font-semibold">0.00€</span>
+              </div>
+              
+              <div class="divider my-2"></div>
+              
+              <div class="flex justify-between text-lg">
+                <span class="font-bold">Total</span>
+                <span id="total" class="font-bold text-primary">0.00€</span>
+              </div>
+              
+              <div class="alert alert-info">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="text-sm">Les frais seront calculés au checkout</span>
+              </div>
+            </div>
+            
+            <div class="divider my-2"></div>
+            
+            <!-- Bouton commander -->
+            <button id="checkout-btn" class="btn btn-primary btn-block">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Commander
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast toast-top toast-end z-50"></div>
+
+</body>
+</html>
+
+<script define:vars={{ RESTAURANT_ID }}>
+  // Charger le thème et logo dynamiquement
+  async function loadConfig() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
+      }
+    } catch (error) {
+      console.error('Erreur config:', error);
+    }
+  }
+
+  loadConfig();
+
+  // 🛒 Gestion du panier
+  let cart = [];
+
+  // Formater le prix
+  function formatPrice(price) {
+    return new Intl.NumberFormat('fr-BE', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(price);
+  }
+
+  // Charger le panier
+  function loadCart() {
+    cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    renderCart();
+    updateSummary();
+  }
+
+  // Afficher les articles
+  function renderCart() {
+    const cartItems = document.getElementById('cart-items');
+    const emptyCart = document.getElementById('empty-cart');
+    
+    if (cart.length === 0) {
+      cartItems.style.display = 'none';
+      emptyCart.style.display = 'block';
+      return;
+    }
+    
+    cartItems.style.display = 'block';
+    emptyCart.style.display = 'none';
+    
+    cartItems.innerHTML = cart.map((item, index) => `
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+          <div class="flex gap-4">
+            
+            <!-- Infos produit -->
+            <div class="flex-1">
+              <h3 class="font-bold text-lg">${item.nom}</h3>
+              
+              <!-- Suppléments -->
+              ${item.supplements && item.supplements.length > 0 ? `
+                <div class="text-sm text-base-content/70 mt-1">
+                  <span class="font-semibold">Avec:</span> ${item.supplements.map(s => s.name).join(', ')}
+                </div>
+              ` : ''}
+              
+              <!-- Ingrédients retirés -->
+              ${item.removed_ingredients && item.removed_ingredients.length > 0 ? `
+                <div class="text-sm text-base-content/70 mt-1">
+                  <span class="font-semibold">Sans:</span> ${item.removed_ingredients.join(', ')}
+                </div>
+              ` : ''}
+              
+              <!-- Prix unitaire -->
+              <div class="text-sm text-base-content/60 mt-2">
+                ${formatPrice(item.prix)} / unité
+              </div>
+            </div>
+            
+            <!-- Quantité et actions -->
+            <div class="flex flex-col items-end justify-between">
+              <!-- Prix total -->
+              <div class="text-lg font-bold text-primary">
+                ${formatPrice(item.prix * item.quantite)}
+              </div>
+              
+              <!-- Contrôles quantité -->
+              <div class="flex items-center gap-2">
+                <button class="btn btn-sm btn-circle" onclick="changeQuantity(${index}, -1)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                  </svg>
+                </button>
+                <span class="font-semibold w-8 text-center">${item.quantite}</span>
+                <button class="btn btn-sm btn-circle" onclick="changeQuantity(${index}, 1)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+                <button class="btn btn-sm btn-ghost btn-circle text-error" onclick="removeItem(${index})">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Mettre à jour le résumé
+  function updateSummary() {
+    const subtotal = cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+    
+    // Pas de frais au panier, seulement le sous-total
+    document.getElementById('subtotal').textContent = formatPrice(subtotal);
+    document.getElementById('total').textContent = formatPrice(subtotal);
+  }
+
+  // Changer quantité
+  window.changeQuantity = function(index, delta) {
+    cart[index].quantite += delta;
+    
+    if (cart[index].quantite <= 0) {
+      cart.splice(index, 1);
+    }
+    
+    saveCart();
+  };
+
+  // Supprimer article
+  window.removeItem = function(index) {
+    cart.splice(index, 1);
+    saveCart();
+  };
+
+  // Vider le panier
+  document.getElementById('clear-cart-btn')?.addEventListener('click', () => {
+    if (confirm('Êtes-vous sûr de vouloir vider le panier ?')) {
+      cart = [];
+      saveCart();
+    }
+  });
+
+  // Sauvegarder et recharger
+  function saveCart() {
+    localStorage.setItem('cart', JSON.stringify(cart));
+    window.dispatchEvent(new Event('cart-updated'));
+    loadCart();
+  }
+
+  // Bouton commander
+  document.getElementById('checkout-btn')?.addEventListener('click', () => {
+    // Vérifier qu'il y a des articles
+    if (cart.length === 0) {
+      alert('Votre panier est vide');
+      return;
+    }
+    
+    // Redirection vers checkout
+    window.location.href = '/checkout';
+  });
+
+  // Charger au démarrage
+  loadCart();
+</script>

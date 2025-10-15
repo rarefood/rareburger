@@ -1,0 +1,223 @@
+---
+// src/pages/stripe-checkout.astro
+// ============================================
+// 💳 CMDOLA - Stripe Checkout
+// ============================================
+
+import Navbar from '../components/Navbar.astro';
+import '../assets/app.css';
+
+const orderId = Astro.url.searchParams.get('order');
+const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
+
+if (!orderId) {
+  return Astro.redirect('/cart');
+}
+---
+
+<!DOCTYPE html>
+<html lang="fr" data-theme="autumn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paiement - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+</head>
+
+<body class="bg-base-200 min-h-screen">
+  
+  <Navbar />
+  
+  <div class="container mx-auto px-4 py-8">
+    
+    <!-- Chargement -->
+    <div id="loading-section" class="flex flex-col items-center justify-center min-h-[60vh]">
+      <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
+      <h2 class="text-2xl font-bold mb-2">Préparation du paiement...</h2>
+      <p class="text-base-content/60">Vous allez être redirigé vers la page de paiement sécurisée</p>
+    </div>
+
+    <!-- Erreur -->
+    <div id="error-section" class="max-w-2xl mx-auto" style="display: none;">
+      <div class="alert alert-error shadow-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <h3 class="font-bold">Erreur de paiement</h3>
+          <div id="error-message" class="text-sm"></div>
+        </div>
+      </div>
+      
+      <div class="flex gap-4 mt-6 justify-center">
+        <a href="/cart" class="btn btn-outline">
+          Retour au panier
+        </a>
+        <button id="retry-btn" class="btn btn-primary">
+          Réessayer
+        </button>
+      </div>
+    </div>
+
+    <!-- Récapitulatif (optionnel - affiché pendant le chargement) -->
+    <div id="summary-section" class="max-w-2xl mx-auto mt-8" style="display: none;">
+      <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="card-title">Récapitulatif de votre commande</h3>
+          <div class="divider my-2"></div>
+          
+          <div id="order-summary" class="space-y-2">
+            <!-- Rempli par JS -->
+          </div>
+          
+          <div class="divider my-2"></div>
+          
+          <div class="flex justify-between text-lg">
+            <span class="font-bold">Total à payer</span>
+            <span id="total-amount" class="font-bold text-primary">0.00€</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
+
+<script define:vars={{ orderId, restaurantId, apiBaseUrl }}>
+  // Charger le thème et logo dynamiquement
+  async function loadConfig() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/${restaurantId}/config`);
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `${apiBaseUrl}/images/${restaurantId}/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
+      }
+    } catch (error) {
+      console.error('Erreur config:', error);
+    }
+  }
+
+  loadConfig();
+
+  function formatPrice(price) {
+    return new Intl.NumberFormat('fr-BE', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(price);
+  }
+
+  async function createCheckoutSession() {
+    try {
+      console.log('🔄 Création session Stripe pour commande:', orderId);
+      
+      // Charger la commande pour afficher le récapitulatif
+      const orderResponse = await fetch(`${apiBaseUrl}/${restaurantId}/commandes/${orderId}`);
+      if (!orderResponse.ok) {
+        throw new Error('Commande introuvable');
+      }
+      
+      const order = await orderResponse.json();
+      console.log('📦 Commande chargée:', order);
+      
+      // Afficher le récapitulatif (optionnel)
+      displayOrderSummary(order);
+      
+      // Créer la session Stripe Checkout
+      const sessionResponse = await fetch(`${apiBaseUrl}/${restaurantId}/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': window.location.origin
+        },
+        body: JSON.stringify({
+          order_id: orderId
+        })
+      });
+      
+      if (!sessionResponse.ok) {
+        const errorData = await sessionResponse.json();
+        throw new Error(errorData.error || 'Erreur création session Stripe');
+      }
+      
+      const sessionData = await sessionResponse.json();
+      console.log('✅ Session Stripe créée:', sessionData);
+      
+      // Rediriger vers Stripe Checkout
+      if (sessionData.url) {
+        console.log('🔄 Redirection vers Stripe...');
+        window.location.href = sessionData.url;
+      } else {
+        throw new Error('URL de paiement manquante');
+      }
+      
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      showError(error.message);
+    }
+  }
+
+  function displayOrderSummary(order) {
+    const summarySection = document.getElementById('summary-section');
+    const orderSummary = document.getElementById('order-summary');
+    const totalAmount = document.getElementById('total-amount');
+    
+    if (!orderSummary || !totalAmount) return;
+    
+    // Articles
+    let summaryHTML = '';
+    for (const article of order.articles) {
+      summaryHTML += `
+        <div class="flex justify-between text-sm">
+          <span>${article.quantite}x ${article.nom}</span>
+          <span class="font-semibold">${formatPrice(article.prix * article.quantite)}</span>
+        </div>
+      `;
+    }
+    
+    // Frais de livraison
+    if (order.frais_livraison > 0) {
+      summaryHTML += `
+        <div class="flex justify-between text-sm text-base-content/70">
+          <span>Frais de livraison</span>
+          <span>${formatPrice(order.frais_livraison)}</span>
+        </div>
+      `;
+    }
+    
+    orderSummary.innerHTML = summaryHTML;
+    totalAmount.textContent = formatPrice(order.prix_total);
+    
+    summarySection.style.display = 'block';
+  }
+
+  function showError(message) {
+    document.getElementById('loading-section').style.display = 'none';
+    document.getElementById('summary-section').style.display = 'none';
+    document.getElementById('error-section').style.display = 'block';
+    document.getElementById('error-message').textContent = message;
+  }
+
+  // Bouton réessayer
+  document.getElementById('retry-btn')?.addEventListener('click', () => {
+    document.getElementById('error-section').style.display = 'none';
+    document.getElementById('loading-section').style.display = 'flex';
+    createCheckoutSession();
+  });
+
+  // Lancer la création de la session au chargement
+  if (orderId) {
+    createCheckoutSession();
+  } else {
+    showError('Aucune commande spécifiée');
+  }
+</script>

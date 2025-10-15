@@ -1,0 +1,687 @@
+---
+// src/pages/admin/menu.astro
+import AdminLayout from '../../layouts/AdminLayout.astro';
+
+export const prerender = false;
+
+const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+---
+
+<AdminLayout title="Menu">
+  
+  <div class="mb-6">
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-bold">Gestion du menu</h1>
+        <p class="text-base-content/60">Gérez vos produits, catégories et suppléments</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost" onclick="openManageCategoriesModal()">
+          Gérer catégories
+        </button>
+        <button class="btn btn-ghost" onclick="openManageSupplementsModal()">
+          Gérer suppléments
+        </button>
+        <button class="btn btn-primary" onclick="addProductModal.showModal()">
+          Ajouter un produit
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+    <button class="btn btn-sm category-filter active" data-category="">Tous</button>
+    <div id="categoryFilters"></div>
+  </div>
+
+  <!-- Grid produits -->
+  <div id="produitsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+  </div>
+
+  <!-- Modal Produit -->
+  <dialog id="addProductModal" class="modal">
+    <div class="modal-box max-w-4xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-lg mb-4" id="modalTitle">Ajouter un produit</h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Nom du produit</span></label>
+          <input type="text" id="produitNom" class="input input-bordered" required />
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Description</span></label>
+          <textarea id="produitDescription" class="textarea textarea-bordered h-20"></textarea>
+        </div>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">Prix (€)</span></label>
+          <input type="number" step="0.01" id="produitPrix" class="input input-bordered" required />
+        </div>
+
+        <div class="form-control">
+          <label class="label"><span class="label-text">Catégorie</span></label>
+          <select id="produitCategory" class="select select-bordered">
+          </select>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Images</span></label>
+          <input type="file" id="produitImages" class="file-input file-input-bordered" accept="image/*" multiple />
+          <div id="imagePreview" class="flex gap-2 mt-2 flex-wrap"></div>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Suppléments disponibles</span></label>
+          <div id="supplementsCheckboxes" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Ingrédients retirables (séparés par des virgules)</span></label>
+          <input type="text" id="produitRemovable" class="input input-bordered" placeholder="salade, tomate, oignon" />
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <label class="label"><span class="label-text">Allergènes (séparés par des virgules)</span></label>
+          <input type="text" id="produitAllergenes" class="input input-bordered" placeholder="gluten, lactose" />
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer">
+            <span class="label-text">Produit populaire</span>
+            <input type="checkbox" id="produitPopular" class="checkbox" />
+          </label>
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer">
+            <span class="label-text">Disponible</span>
+            <input type="checkbox" id="produitDisponible" class="checkbox" checked />
+          </label>
+        </div>
+
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" onclick="addProductModal.close()">Annuler</button>
+        <button class="btn btn-primary" id="saveProductBtn">Enregistrer</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Gérer Catégories -->
+  <dialog id="manageCategoriesModal" class="modal">
+    <div class="modal-box max-w-2xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-lg mb-4">Gérer les catégories</h3>
+      
+      <!-- Formulaire ajout -->
+      <div class="card bg-base-200 p-4 mb-4">
+        <h4 class="font-bold mb-2">Ajouter une catégorie</h4>
+        <div class="flex gap-2">
+          <input type="text" id="newCategoryName" class="input input-bordered input-sm flex-1" placeholder="Nom" />
+          <input type="text" id="newCategoryIcon" class="input input-bordered input-sm w-20" placeholder="🍔" />
+          <button class="btn btn-sm btn-primary" id="addCategoryBtn">Ajouter</button>
+        </div>
+      </div>
+
+      <!-- Liste catégories -->
+      <div class="space-y-2" id="categoriesManageList">
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Gérer Suppléments -->
+  <dialog id="manageSupplementsModal" class="modal">
+    <div class="modal-box max-w-2xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-lg mb-4">Gérer les suppléments</h3>
+      
+      <!-- Formulaire ajout -->
+      <div class="card bg-base-200 p-4 mb-4">
+        <h4 class="font-bold mb-2">Ajouter un supplément</h4>
+        <div class="flex gap-2">
+          <input type="text" id="newSupplementName" class="input input-bordered input-sm flex-1" placeholder="Nom" />
+          <input type="number" step="0.01" id="newSupplementPrice" class="input input-bordered input-sm w-32" placeholder="Prix" />
+          <button class="btn btn-sm btn-primary" id="addSupplementBtn">Ajouter</button>
+        </div>
+      </div>
+
+      <!-- Liste suppléments -->
+      <div class="space-y-2" id="supplementsManageList">
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Catégorie -->
+  <dialog id="addCategoryModal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-lg mb-4">Ajouter une catégorie</h3>
+      
+      <div class="form-control">
+        <label class="label"><span class="label-text">Nom</span></label>
+        <input type="text" id="categoryName" class="input input-bordered" />
+      </div>
+
+      <div class="form-control mt-4">
+        <label class="label"><span class="label-text">Icône (emoji)</span></label>
+        <input type="text" id="categoryIcon" class="input input-bordered" placeholder="🍔" />
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" onclick="addCategoryModal.close()">Annuler</button>
+        <button class="btn btn-primary" id="saveCategoryBtn">Enregistrer</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Supplément -->
+  <dialog id="addSupplementModal" class="modal">
+    <div class="modal-box">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-lg mb-4">Ajouter un supplément</h3>
+      
+      <div class="form-control">
+        <label class="label"><span class="label-text">Nom</span></label>
+        <input type="text" id="supplementName" class="input input-bordered" />
+      </div>
+
+      <div class="form-control mt-4">
+        <label class="label"><span class="label-text">Prix (€)</span></label>
+        <input type="number" step="0.01" id="supplementPrice" class="input input-bordered" />
+      </div>
+
+      <div class="modal-action">
+        <button class="btn" onclick="addSupplementModal.close()">Annuler</button>
+        <button class="btn btn-primary" id="saveSupplementBtn">Enregistrer</button>
+      </div>
+    </div>
+  </dialog>
+
+</AdminLayout>
+
+<script define:vars={{ RESTAURANT_ID }}>
+  let menuData = { categories: [], supplements: [], produits: [] };
+  let currentFilter = '';
+  let editingProductId = null;
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('fr-BE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(price);
+  };
+
+  async function loadMenu() {
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/menu`);
+      menuData = await response.json();
+      renderCategoryFilters();
+      renderProduits();
+      document.getElementById('loader').classList.add('hidden');
+    } catch (error) {
+      console.error('Erreur chargement menu:', error);
+    }
+  }
+
+  function renderCategoryFilters() {
+    const container = document.getElementById('categoryFilters');
+    container.innerHTML = menuData.categories.map(cat => `
+      <button class="btn btn-sm category-filter" data-category="${cat.id}">
+        ${cat.icon} ${cat.name}
+      </button>
+    `).join('');
+
+    document.querySelectorAll('.category-filter').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.dataset.category;
+        renderProduits();
+      });
+    });
+  }
+
+  function renderProduits() {
+    const grid = document.getElementById('produitsGrid');
+    const filtered = currentFilter 
+      ? menuData.produits.filter(p => p.category === currentFilter)
+      : menuData.produits;
+
+    grid.innerHTML = filtered.map(produit => {
+      const imageUrl = produit.images?.[0] 
+        ? `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${produit.images[0]}`
+        : '/placeholder.jpg';
+
+      return `
+        <div class="card bg-base-100 shadow-lg ${!produit.disponible ? 'opacity-60' : ''}">
+          <figure class="h-48 bg-base-200">
+            <img src="${imageUrl}" alt="${produit.nom}" class="w-full h-full object-cover" />
+          </figure>
+          <div class="card-body p-4">
+            <div class="flex justify-between items-start">
+              <h3 class="card-title text-base">${produit.nom}</h3>
+              ${produit.popular ? '<span class="badge badge-primary badge-sm">★</span>' : ''}
+            </div>
+            <p class="text-sm text-base-content/60 line-clamp-2">${produit.description || ''}</p>
+            <div class="flex justify-between items-center mt-2">
+              <span class="text-lg font-bold">${formatPrice(produit.prix)}</span>
+              <span class="badge badge-sm ${produit.disponible ? 'badge-success' : 'badge-error'}">
+                ${produit.disponible ? 'En stock' : 'Rupture'}
+              </span>
+            </div>
+            <div class="card-actions justify-end mt-2">
+              <button class="btn btn-xs btn-ghost toggle-stock-btn" data-id="${produit.id}" data-disponible="${produit.disponible}">
+                ${produit.disponible ? '✓' : '✗'}
+              </button>
+              <button class="btn btn-xs btn-ghost edit-product-btn" data-id="${produit.id}">✏️</button>
+              <button class="btn btn-xs btn-ghost delete-product-btn" data-id="${produit.id}">🗑️</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    attachProductActions();
+  }
+
+  function attachProductActions() {
+    document.querySelectorAll('.toggle-stock-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const disponible = btn.dataset.disponible === 'true';
+        await updateProduct(id, { disponible: !disponible });
+      });
+    });
+
+    document.querySelectorAll('.edit-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        openEditProduct(id);
+      });
+    });
+
+    document.querySelectorAll('.delete-product-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        if (confirm('Supprimer ce produit ?')) {
+          await deleteProduct(id);
+        }
+      });
+    });
+  }
+
+  function openEditProduct(id) {
+    editingProductId = id;
+    const produit = menuData.produits.find(p => p.id === id);
+    
+    document.getElementById('modalTitle').textContent = 'Modifier le produit';
+    document.getElementById('produitNom').value = produit.nom;
+    document.getElementById('produitDescription').value = produit.description || '';
+    document.getElementById('produitPrix').value = produit.prix;
+    document.getElementById('produitCategory').value = produit.category;
+    document.getElementById('produitRemovable').value = produit.removable_ingredients?.join(', ') || '';
+    document.getElementById('produitAllergenes').value = produit.allergenes?.join(', ') || '';
+    document.getElementById('produitPopular').checked = produit.popular || false;
+    document.getElementById('produitDisponible').checked = produit.disponible;
+
+    renderSupplementsCheckboxes();
+    (produit.supplements || []).forEach(suppId => {
+      const checkbox = document.querySelector(`input[name="supplement"][value="${suppId}"]`);
+      if (checkbox) checkbox.checked = true;
+    });
+
+    addProductModal.showModal();
+  }
+
+  function renderSupplementsCheckboxes() {
+    const container = document.getElementById('supplementsCheckboxes');
+    container.innerHTML = menuData.supplements.map(supp => `
+      <label class="label cursor-pointer gap-2 border rounded p-2">
+        <input type="checkbox" name="supplement" value="${supp.id}" class="checkbox checkbox-sm" />
+        <span class="label-text">${supp.name}</span>
+      </label>
+    `).join('');
+  }
+
+  function populateCategorySelect() {
+    const select = document.getElementById('produitCategory');
+    select.innerHTML = menuData.categories.map(cat => 
+      `<option value="${cat.id}">${cat.name}</option>`
+    ).join('');
+  }
+
+  async function saveProduct() {
+    const nom = document.getElementById('produitNom').value;
+    const description = document.getElementById('produitDescription').value;
+    const prix = parseFloat(document.getElementById('produitPrix').value);
+    const category = document.getElementById('produitCategory').value;
+    const removable = document.getElementById('produitRemovable').value
+      .split(',').map(s => s.trim()).filter(s => s);
+    const allergenes = document.getElementById('produitAllergenes').value
+      .split(',').map(s => s.trim()).filter(s => s);
+    const popular = document.getElementById('produitPopular').checked;
+    const disponible = document.getElementById('produitDisponible').checked;
+
+    const supplements = Array.from(document.querySelectorAll('input[name="supplement"]:checked'))
+      .map(cb => cb.value);
+
+    const images = [];
+    const fileInput = document.getElementById('produitImages');
+    
+    if (fileInput.files.length > 0) {
+      for (const file of fileInput.files) {
+        const uploadedImage = await uploadImage(file);
+        if (uploadedImage) images.push(uploadedImage);
+      }
+    }
+
+    const productData = {
+      nom,
+      description,
+      prix,
+      category,
+      images: images.length > 0 ? images : (editingProductId ? menuData.produits.find(p => p.id === editingProductId).images : []),
+      supplements,
+      removable_ingredients: removable,
+      allergenes,
+      popular,
+      disponible
+    };
+
+    try {
+      if (editingProductId) {
+        await updateProduct(editingProductId, productData);
+      } else {
+        await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/menu`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productData)
+        });
+      }
+      
+      addProductModal.close();
+      resetProductForm();
+      await loadMenu();
+    } catch (error) {
+      console.error('Erreur sauvegarde:', error);
+      alert('Erreur lors de la sauvegarde');
+    }
+  }
+
+  async function uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/upload-image`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      return data.filename;
+    } catch (error) {
+      console.error('Erreur upload:', error);
+      return null;
+    }
+  }
+
+  async function updateProduct(id, data) {
+    try {
+      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/menu/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      await loadMenu();
+    } catch (error) {
+      console.error('Erreur mise à jour:', error);
+    }
+  }
+
+  async function deleteProduct(id) {
+    try {
+      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/menu/${id}`, {
+        method: 'DELETE'
+      });
+      await loadMenu();
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+    }
+  }
+
+  function resetProductForm() {
+    editingProductId = null;
+    document.getElementById('modalTitle').textContent = 'Ajouter un produit';
+    document.getElementById('produitNom').value = '';
+    document.getElementById('produitDescription').value = '';
+    document.getElementById('produitPrix').value = '';
+    document.getElementById('produitRemovable').value = '';
+    document.getElementById('produitAllergenes').value = '';
+    document.getElementById('produitPopular').checked = false;
+    document.getElementById('produitDisponible').checked = true;
+    document.getElementById('produitImages').value = '';
+    document.getElementById('imagePreview').innerHTML = '';
+    document.querySelectorAll('input[name="supplement"]').forEach(cb => cb.checked = false);
+  }
+
+  function renderCategories() {
+    const container = document.getElementById('categoriesList');
+    container.innerHTML = menuData.categories.map(cat => `
+      <div class="card bg-base-100 shadow">
+        <div class="card-body p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">${cat.icon}</span>
+              <span class="font-bold">${cat.name}</span>
+            </div>
+            <button class="btn btn-ghost btn-sm delete-category-btn" data-id="${cat.id}">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSupplements() {
+    const container = document.getElementById('supplementsList');
+    container.innerHTML = menuData.supplements.map(supp => `
+      <div class="flex items-center justify-between p-4 bg-base-100 rounded shadow">
+        <div>
+          <span class="font-bold">${supp.name}</span>
+          <span class="text-sm text-base-content/60 ml-2">${formatPrice(supp.price)}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm delete-supplement-btn" data-id="${supp.id}">🗑️</button>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('saveProductBtn').addEventListener('click', saveProduct);
+
+  // Gestion catégories
+  function renderCategoriesManage() {
+    const container = document.getElementById('categoriesManageList');
+    container.innerHTML = menuData.categories.map((cat, index) => `
+      <div class="card bg-base-100 shadow p-3">
+        <div class="flex items-center gap-3">
+          <input type="text" value="${cat.icon}" class="input input-sm w-16 text-center" 
+            onchange="updateCategory('${cat.id}', 'icon', this.value)" />
+          <input type="text" value="${cat.name}" class="input input-sm flex-1" 
+            onchange="updateCategory('${cat.id}', 'name', this.value)" />
+          <button class="btn btn-sm btn-ghost" onclick="deleteCategory('${cat.id}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function addCategory() {
+    const name = document.getElementById('newCategoryName').value.trim();
+    const icon = document.getElementById('newCategoryIcon').value.trim();
+    
+    if (!name || !icon) {
+      alert('Veuillez remplir tous les champs');
+      return;
+    }
+
+    const newCategory = {
+      id: name.toLowerCase().replace(/\s+/g, '_'),
+      name,
+      icon
+    };
+
+    menuData.categories.push(newCategory);
+    await saveMenuData();
+    
+    document.getElementById('newCategoryName').value = '';
+    document.getElementById('newCategoryIcon').value = '';
+    
+    renderCategoriesManage();
+    renderCategoryFilters();
+    populateCategorySelect();
+  }
+
+  window.updateCategory = async function(id, field, value) {
+    const category = menuData.categories.find(c => c.id === id);
+    if (category) {
+      category[field] = value;
+      await saveMenuData();
+      renderCategoryFilters();
+      populateCategorySelect();
+    }
+  };
+
+  window.deleteCategory = async function(id) {
+    if (!confirm('Supprimer cette catégorie ?')) return;
+    
+    menuData.categories = menuData.categories.filter(c => c.id !== id);
+    await saveMenuData();
+    
+    renderCategoriesManage();
+    renderCategoryFilters();
+    populateCategorySelect();
+    renderProduits();
+  };
+
+  // Gestion suppléments
+  function renderSupplementsManage() {
+    const container = document.getElementById('supplementsManageList');
+    container.innerHTML = menuData.supplements.map(supp => `
+      <div class="card bg-base-100 shadow p-3">
+        <div class="flex items-center gap-3">
+          <input type="text" value="${supp.name}" class="input input-sm flex-1" 
+            onchange="updateSupplement('${supp.id}', 'name', this.value)" />
+          <input type="number" step="0.01" value="${supp.price}" class="input input-sm w-32" 
+            onchange="updateSupplement('${supp.id}', 'price', parseFloat(this.value))" />
+          <button class="btn btn-sm btn-ghost" onclick="deleteSupplement('${supp.id}')">🗑️</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function addSupplement() {
+    const name = document.getElementById('newSupplementName').value.trim();
+    const price = parseFloat(document.getElementById('newSupplementPrice').value);
+    
+    if (!name || isNaN(price)) {
+      alert('Veuillez remplir tous les champs');
+      return;
+    }
+
+    const newSupplement = {
+      id: name.toLowerCase().replace(/\s+/g, '_'),
+      name,
+      price
+    };
+
+    menuData.supplements.push(newSupplement);
+    await saveMenuData();
+    
+    document.getElementById('newSupplementName').value = '';
+    document.getElementById('newSupplementPrice').value = '';
+    
+    renderSupplementsManage();
+    renderSupplementsCheckboxes();
+  }
+
+  window.updateSupplement = async function(id, field, value) {
+    const supplement = menuData.supplements.find(s => s.id === id);
+    if (supplement) {
+      supplement[field] = value;
+      await saveMenuData();
+      renderSupplementsCheckboxes();
+    }
+  };
+
+  window.deleteSupplement = async function(id) {
+    if (!confirm('Supprimer ce supplément ?')) return;
+    
+    menuData.supplements = menuData.supplements.filter(s => s.id !== id);
+    await saveMenuData();
+    
+    renderSupplementsManage();
+    renderSupplementsCheckboxes();
+  };
+
+  async function saveMenuData() {
+    try {
+      await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/menu`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(menuData)
+      });
+    } catch (error) {
+      console.error('Erreur sauvegarde menu:', error);
+      alert('Erreur lors de la sauvegarde');
+    }
+  }
+
+  document.getElementById('addCategoryBtn').addEventListener('click', addCategory);
+  document.getElementById('addSupplementBtn').addEventListener('click', addSupplement);
+
+  window.openManageCategoriesModal = function() {
+    console.log('Categories:', menuData.categories); // Debug
+    renderCategoriesManage();
+    manageCategoriesModal.showModal();
+  };
+
+  window.openManageSupplementsModal = function() {
+    console.log('Supplements:', menuData.supplements); // Debug
+    renderSupplementsManage();
+    manageSupplementsModal.showModal();
+  };
+
+  // S'assurer que les fonctions de render existent avant le chargement
+  window.renderCategoriesManage = renderCategoriesManage;
+  window.renderSupplementsManage = renderSupplementsManage;
+
+  window.addEventListener('click', (e) => {
+    if (e.target === addProductModal) {
+      resetProductForm();
+    }
+  });
+
+  addProductModal.addEventListener('close', resetProductForm);
+
+  loadMenu().then(() => {
+    populateCategorySelect();
+    renderSupplementsCheckboxes();
+  });
+</script>

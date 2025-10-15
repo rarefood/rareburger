@@ -1,0 +1,202 @@
+---
+// src/pages/admin/index.astro
+import "../../assets/app.css";
+
+export const prerender = false;
+
+const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+
+// Vérification simple sans appel API
+const token = Astro.cookies.get('admin_token')?.value;
+if (token) {
+  return Astro.redirect('/admin/dashboard');
+}
+---
+
+<!DOCTYPE html>
+<html lang="fr" data-theme="autumn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Connexion Admin - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+</head>
+<body class="min-h-screen bg-base-200">
+  
+  <div class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full">
+      
+      <div class="text-center mb-8">
+        <div class="flex justify-center mb-4">
+          <img src="/favicon.ico" alt="Logo" class="w-24 h-24 rounded-2xl shadow-lg" id="logoImage" />
+        </div>
+        <h1 class="text-4xl font-bold text-primary mb-2" id="restaurantName">CMDOLA</h1>
+        <p class="text-base-content/70 text-lg">Espace Administration</p>
+      </div>
+
+      <div class="card bg-base-100 shadow-2xl">
+        <div class="card-body">
+          <h2 class="card-title text-2xl justify-center mb-6">Connexion</h2>
+          
+          <form id="loginForm" class="space-y-4">
+            
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Nom d'utilisateur</span>
+              </label>
+              <input 
+                type="text" 
+                id="username"
+                name="username"
+                placeholder="admin" 
+                class="input input-bordered w-full" 
+                required
+                autocomplete="username"
+              />
+            </div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Mot de passe</span>
+              </label>
+              <input 
+                type="password" 
+                id="password"
+                name="password"
+                placeholder="••••••••" 
+                class="input input-bordered w-full" 
+                required
+                autocomplete="current-password"
+              />
+            </div>
+
+            <div id="errorAlert" class="alert alert-error hidden">
+              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span id="errorMessage">Identifiants incorrects</span>
+            </div>
+
+            <div class="form-control mt-6">
+              <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+                <span id="btnText">Se connecter</span>
+                <span id="btnLoader" class="loading loading-spinner loading-sm hidden"></span>
+              </button>
+            </div>
+
+          </form>
+
+          <div class="divider text-xs text-base-content/50">Accès restreint</div>
+
+        </div>
+      </div>
+
+      <div class="text-center mt-6">
+        <a href="/" class="btn btn-ghost btn-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Retour au site
+        </a>
+      </div>
+
+      <div class="text-center mt-6 text-sm text-base-content/60">
+        <p>CMDOLA Admin Panel v1.2</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script define:vars={{ RESTAURANT_ID }}>
+    // Charger le thème et logo
+    async function loadConfig() {
+      try {
+        const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/config`);
+        const config = await response.json();
+        
+        if (config.theme?.daisy) {
+          document.documentElement.setAttribute('data-theme', config.theme.daisy);
+        }
+        
+        if (config.theme?.logo) {
+          // Construire l'URL complète du logo
+          const logoUrl = `https://api.cmdola.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+          const favicon = document.getElementById('favicon');
+          const logoImage = document.getElementById('logoImage');
+          if (favicon) favicon.href = logoUrl;
+          if (logoImage) logoImage.src = logoUrl;
+        }
+
+        if (config.nom) {
+          const nameEl = document.getElementById('restaurantName');
+          if (nameEl) nameEl.textContent = config.nom;
+        }
+      } catch (error) {
+        console.error('Erreur config:', error);
+      }
+    }
+
+    // Double check auth
+    const token = localStorage.getItem('admin_token');
+    if (token) {
+      window.location.href = '/admin/dashboard';
+    } else {
+      loadConfig();
+    }
+
+    // Gestion formulaire
+    const form = document.getElementById('loginForm');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = document.getElementById('btnText');
+    const btnLoader = document.getElementById('btnLoader');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      errorAlert.classList.add('hidden');
+      submitBtn.disabled = true;
+      btnText.classList.add('hidden');
+      btnLoader.classList.remove('hidden');
+
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const response = await fetch(`https://api.cmdola.be/api/${RESTAURANT_ID}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          localStorage.setItem('admin_token', data.token);
+          localStorage.setItem('admin_restaurant', JSON.stringify(data.restaurant));
+          document.cookie = `admin_token=${data.token}; path=/; max-age=86400`;
+          window.location.href = '/admin/dashboard';
+        } else {
+          errorMessage.textContent = data.message || 'Identifiants incorrects';
+          errorAlert.classList.remove('hidden');
+          submitBtn.disabled = false;
+          btnText.classList.remove('hidden');
+          btnLoader.classList.add('hidden');
+        }
+      } catch (error) {
+        console.error('Erreur login:', error);
+        errorMessage.textContent = 'Erreur de connexion au serveur';
+        errorAlert.classList.remove('hidden');
+        submitBtn.disabled = false;
+        btnText.classList.remove('hidden');
+        btnLoader.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('username').focus();
+  </script>
+
+</body>
+</html>

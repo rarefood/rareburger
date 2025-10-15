@@ -1,0 +1,252 @@
+---
+// src/components/CategorySelector.astro
+// ============================================
+// 📂 CMDOLA - Sélecteur de catégories horizontal
+// ============================================
+
+import { api } from '../lib/api';
+import "../assets/app.css";
+
+interface Props {
+  selectedCategory?: string;
+}
+
+const {
+  selectedCategory = 'all',
+} = Astro.props;
+
+// Récupérer les catégories depuis l'API
+let categories: Array<{ id: string; name: string; icon: string }> = [];
+
+try {
+  const menu = await api.menu.get();
+  categories = menu.categories || [];
+  
+  // Si pas de catégories, utiliser les catégories par défaut
+  if (categories.length === 0) {
+    console.warn('⚠️  Aucune catégorie depuis l\'API, utilisation des catégories par défaut');
+    categories = [
+      { id: 'entrees', name: 'Entrées', icon: '🥗' },
+      { id: 'plats', name: 'Plats', icon: '🍽️' },
+      { id: 'pizzas', name: 'Pizzas', icon: '🍕' },
+      { id: 'burgers', name: 'Burgers', icon: '🍔' },
+      { id: 'boissons', name: 'Boissons', icon: '🥤' },
+      { id: 'desserts', name: 'Desserts', icon: '🍰' },
+    ];
+  }
+} catch (error) {
+  console.error('Erreur chargement catégories:', error);
+  // Catégories par défaut en cas d'erreur
+  categories = [
+    { id: 'entrees', name: 'Entrées', icon: '🥗' },
+    { id: 'plats', name: 'Plats', icon: '🍽️' },
+    { id: 'pizzas', name: 'Pizzas', icon: '🍕' },
+    { id: 'burgers', name: 'Burgers', icon: '🍔' },
+    { id: 'boissons', name: 'Boissons', icon: '🥤' },
+    { id: 'desserts', name: 'Desserts', icon: '🍰' },
+  ];
+}
+
+// Ajouter "Tout" au début
+const allCategories = [
+  { id: 'all', name: 'Tout', icon: '🍴' },
+  ...categories,
+];
+---
+
+<!-- Container principal avec scroll horizontal -->
+<div class="w-full bg-base-100 border-b border-base-300">
+  <div class="container mx-auto px-4 py-4">
+    
+    <!-- Conteneur scrollable horizontal -->
+    <div 
+      class="flex gap-3 overflow-x-auto scrollbar-hide snap-x snap-mandatory"
+      id="category-scroll"
+    >
+      {allCategories.map((category) => (
+        <button
+          data-category={category.id}
+          class={`
+            btn btn-lg flex-shrink-0 snap-start
+            ${selectedCategory === category.id ? 'btn-primary' : 'btn-ghost'}
+            flex flex-col items-center justify-center
+            min-w-[100px] h-auto py-3 px-4
+            hover:btn-primary hover:scale-105
+            transition-all duration-200
+          `}
+        >
+          <!-- Icône -->
+          <span class="text-3xl mb-1" aria-hidden="true">
+            {category.icon}
+          </span>
+          
+          <!-- Nom -->
+          <span class="text-xs font-medium whitespace-nowrap">
+            {category.name}
+          </span>
+        </button>
+      ))}
+    </div>
+
+  </div>
+</div>
+
+<style>
+  /* Masquer la scrollbar mais garder le scroll */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Smooth scroll */
+  #category-scroll {
+    scroll-behavior: smooth;
+  }
+
+  /* Effet au hover */
+  button[data-category]:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Animation pour la catégorie active */
+  button[data-category].btn-primary {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+                0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Responsive - Ajuster la taille des boutons sur petit écran */
+  @media (max-width: 640px) {
+    button[data-category] {
+      min-width: 85px;
+      padding: 0.75rem 0.5rem;
+    }
+    
+    button[data-category] span:first-child {
+      font-size: 2rem;
+    }
+  }
+
+  /* Responsive - Plus d'espace sur grand écran */
+  @media (min-width: 1024px) {
+    button[data-category] {
+      min-width: 120px;
+    }
+  }
+</style>
+
+<script>
+  // 🎯 Gestion côté client de la sélection de catégorie
+  
+  interface CategoryChangeEvent extends CustomEvent {
+    detail: {
+      categoryId: string;
+      categoryName: string;
+    };
+  }
+
+  // Fonction pour initialiser les boutons
+  function initCategoryButtons() {
+    const buttons = document.querySelectorAll('button[data-category]');
+    
+    buttons.forEach((button) => {
+      button.addEventListener('click', function(this: HTMLButtonElement) {
+        const categoryId = this.dataset.category;
+        if (!categoryId) return;
+
+        // Retirer la classe active de tous les boutons
+        buttons.forEach((btn) => {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-ghost');
+        });
+
+        // Ajouter la classe active au bouton cliqué
+        this.classList.remove('btn-ghost');
+        this.classList.add('btn-primary');
+
+        // Trouver le nom de la catégorie
+        const categoryName = this.querySelector('span:last-child')?.textContent || '';
+
+        // Émettre un événement personnalisé
+        const event: CategoryChangeEvent = new CustomEvent('category-changed', {
+          detail: {
+            categoryId,
+            categoryName,
+          },
+          bubbles: true,
+        }) as CategoryChangeEvent;
+        
+        document.dispatchEvent(event);
+
+        // Sauvegarder dans localStorage
+        localStorage.setItem('selectedCategory', categoryId);
+
+        // Log pour debug
+        console.log('Catégorie sélectionnée:', categoryId, categoryName);
+      });
+    });
+
+    // Restaurer la catégorie depuis localStorage au chargement
+    const savedCategory = localStorage.getItem('selectedCategory');
+    if (savedCategory) {
+      const savedButton = document.querySelector(`button[data-category="${savedCategory}"]`);
+      if (savedButton) {
+        buttons.forEach((btn) => {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-ghost');
+        });
+        savedButton.classList.remove('btn-ghost');
+        savedButton.classList.add('btn-primary');
+      }
+    }
+  }
+
+  // Initialiser au chargement
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCategoryButtons);
+  } else {
+    initCategoryButtons();
+  }
+
+  // Support pour Astro View Transitions
+  document.addEventListener('astro:page-load', initCategoryButtons);
+
+  // Support du swipe tactile pour améliorer l'expérience mobile
+  if (typeof window !== 'undefined') {
+    const scrollContainer = document.getElementById('category-scroll');
+    
+    if (scrollContainer) {
+      let isDown = false;
+      let startX: number;
+      let scrollLeft: number;
+
+      scrollContainer.addEventListener('mousedown', (e) => {
+        isDown = true;
+        scrollContainer.style.cursor = 'grabbing';
+        startX = e.pageX - scrollContainer.offsetLeft;
+        scrollLeft = scrollContainer.scrollLeft;
+      });
+
+      scrollContainer.addEventListener('mouseleave', () => {
+        isDown = false;
+        scrollContainer.style.cursor = 'grab';
+      });
+
+      scrollContainer.addEventListener('mouseup', () => {
+        isDown = false;
+        scrollContainer.style.cursor = 'grab';
+      });
+
+      scrollContainer.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - scrollContainer.offsetLeft;
+        const walk = (x - startX) * 2;
+        scrollContainer.scrollLeft = scrollLeft - walk;
+      });
+    }
+  }
+</script>

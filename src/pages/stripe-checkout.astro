@@ -1,15 +1,14 @@
 ---
 // src/pages/stripe-checkout.astro
 // ============================================
-// 💳 CMDOLA - Stripe Checkout
+// 💳 CMDOLA - Stripe Checkout (CORRIGÉ)
 // ============================================
 
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
 const orderId = Astro.url.searchParams.get('order');
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
 if (!orderId) {
   return Astro.redirect('/cart');
@@ -17,7 +16,7 @@ if (!orderId) {
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,6 +35,9 @@ if (!orderId) {
       <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
       <h2 class="text-2xl font-bold mb-2">Préparation du paiement...</h2>
       <p class="text-base-content/60">Vous allez être redirigé vers la page de paiement sécurisée</p>
+      <div class="mt-4 text-sm text-base-content/50">
+        <p>🔒 Paiement sécurisé par Stripe</p>
+      </div>
     </div>
 
     <!-- Erreur -->
@@ -60,7 +62,7 @@ if (!orderId) {
       </div>
     </div>
 
-    <!-- Récapitulatif (optionnel - affiché pendant le chargement) -->
+    <!-- Récapitulatif (affiché pendant le chargement) -->
     <div id="summary-section" class="max-w-2xl mx-auto mt-8" style="display: none;">
       <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
@@ -79,6 +81,16 @@ if (!orderId) {
           </div>
         </div>
       </div>
+      
+      <div class="alert alert-info mt-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div class="text-sm">
+          <p class="font-semibold">Paiement sécurisé</p>
+          <p>Vos informations de paiement sont protégées par Stripe</p>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -86,29 +98,15 @@ if (!orderId) {
 </body>
 </html>
 
-<script define:vars={{ orderId, restaurantId, apiBaseUrl }}>
-  // Charger le thème et logo dynamiquement
-  async function loadConfig() {
-    try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/config`);
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${restaurantId}/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-    } catch (error) {
-      console.error('Erreur config:', error);
-    }
-  }
+<script define:vars={{ orderId, apiBaseUrl }}>
+  // ==========================================
+  // Configuration & Variables
+  // ==========================================
+  let currentOrder = null;
 
-  loadConfig();
-
+  // ==========================================
+  // Utilitaires
+  // ==========================================
   function formatPrice(price) {
     return new Intl.NumberFormat('fr-BE', {
       style: 'currency',
@@ -116,56 +114,63 @@ if (!orderId) {
     }).format(price);
   }
 
-  async function createCheckoutSession() {
+  // ==========================================
+  // Chargement Config
+  // ==========================================
+  async function loadConfig() {
     try {
-      console.log('🔄 Création session Stripe pour commande:', orderId);
+      const response = await fetch(`${apiBaseUrl}/config`);
+      if (!response.ok) return;
       
-      // Charger la commande pour afficher le récapitulatif
-      const orderResponse = await fetch(`${apiBaseUrl}/${restaurantId}/commandes/${orderId}`);
-      if (!orderResponse.ok) {
-        throw new Error('Commande introuvable');
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
       }
       
-      const order = await orderResponse.json();
-      console.log('📦 Commande chargée:', order);
-      
-      // Afficher le récapitulatif (optionnel)
-      displayOrderSummary(order);
-      
-      // Créer la session Stripe Checkout
-      const sessionResponse = await fetch(`${apiBaseUrl}/${restaurantId}/stripe/create-checkout-session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Origin': window.location.origin
-        },
-        body: JSON.stringify({
-          order_id: orderId
-        })
-      });
-      
-      if (!sessionResponse.ok) {
-        const errorData = await sessionResponse.json();
-        throw new Error(errorData.error || 'Erreur création session Stripe');
+      if (config.theme?.logo) {
+        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
       }
-      
-      const sessionData = await sessionResponse.json();
-      console.log('✅ Session Stripe créée:', sessionData);
-      
-      // Rediriger vers Stripe Checkout
-      if (sessionData.url) {
-        console.log('🔄 Redirection vers Stripe...');
-        window.location.href = sessionData.url;
-      } else {
-        throw new Error('URL de paiement manquante');
-      }
-      
     } catch (error) {
-      console.error('❌ Erreur:', error);
-      showError(error.message);
+      console.error('❌ Erreur config:', error);
+      document.documentElement.setAttribute('data-theme', 'autumn');
     }
   }
 
+  // ==========================================
+  // Chargement Commande
+  // ==========================================
+  async function loadOrder(orderId) {
+    try {
+      console.log('📦 Chargement commande:', orderId);
+      
+      // Utiliser l'endpoint public
+      const response = await fetch(`${apiBaseUrl}/commandes/public/${orderId}`);
+      
+      if (!response.ok) {
+        throw new Error('Commande introuvable');
+      }
+      
+      const order = await response.json();
+      console.log('✅ Commande chargée:', order);
+      
+      currentOrder = order;
+      displayOrderSummary(order);
+      
+      return order;
+      
+    } catch (error) {
+      console.error('❌ Erreur chargement commande:', error);
+      // On continue même si on ne peut pas charger les détails
+      return null;
+    }
+  }
+
+  // ==========================================
+  // Affichage Résumé
+  // ==========================================
   function displayOrderSummary(order) {
     const summarySection = document.getElementById('summary-section');
     const orderSummary = document.getElementById('order-summary');
@@ -176,16 +181,33 @@ if (!orderId) {
     // Articles
     let summaryHTML = '';
     for (const article of order.articles) {
+      const articleTotal = article.prix * article.quantite;
       summaryHTML += `
         <div class="flex justify-between text-sm">
-          <span>${article.quantite}x ${article.nom}</span>
-          <span class="font-semibold">${formatPrice(article.prix * article.quantite)}</span>
+          <div class="flex-1">
+            <span class="font-medium">${article.quantite}x ${article.nom}</span>
+            ${article.supplements && article.supplements.length > 0 ? `
+              <div class="text-xs text-base-content/60 ml-4">
+                + ${article.supplements.map(s => s.name).join(', ')}
+              </div>
+            ` : ''}
+          </div>
+          <span class="font-semibold">${formatPrice(articleTotal)}</span>
         </div>
       `;
     }
     
+    // Sous-total
+    summaryHTML += `
+      <div class="divider my-2"></div>
+      <div class="flex justify-between text-sm">
+        <span class="text-base-content/70">Sous-total</span>
+        <span>${formatPrice(order.sous_total)}</span>
+      </div>
+    `;
+    
     // Frais de livraison
-    if (order.frais_livraison > 0) {
+    if (order.frais_livraison && order.frais_livraison > 0) {
       summaryHTML += `
         <div class="flex justify-between text-sm text-base-content/70">
           <span>Frais de livraison</span>
@@ -200,6 +222,64 @@ if (!orderId) {
     summarySection.style.display = 'block';
   }
 
+  // ==========================================
+  // Création Session Stripe
+  // ==========================================
+  async function createCheckoutSession() {
+    try {
+      console.log('🔄 Création session Stripe pour commande:', orderId);
+      
+      // Charger les détails de la commande d'abord
+      await loadOrder(orderId);
+      
+      // Petit délai pour que l'utilisateur voie le récap
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Créer la session Stripe
+      console.log('💳 Appel API Stripe...');
+      const response = await fetch(`${apiBaseUrl}/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          order_id: orderId
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Erreur lors de la création de la session de paiement');
+      }
+      
+      const sessionData = await response.json();
+      console.log('✅ Session Stripe créée:', sessionData);
+      
+      // Rediriger vers Stripe Checkout
+      if (sessionData.url) {
+        console.log('🔄 Redirection vers Stripe...');
+        
+        // Mettre à jour le message de chargement
+        const loadingTitle = document.querySelector('#loading-section h2');
+        if (loadingTitle) {
+          loadingTitle.textContent = 'Redirection vers le paiement...';
+        }
+        
+        // Rediriger
+        window.location.href = sessionData.url;
+      } else {
+        throw new Error('URL de paiement manquante dans la réponse');
+      }
+      
+    } catch (error) {
+      console.error('❌ Erreur:', error);
+      showError(error.message || 'Erreur lors de la création de la session de paiement');
+    }
+  }
+
+  // ==========================================
+  // Gestion Erreurs
+  // ==========================================
   function showError(message) {
     document.getElementById('loading-section').style.display = 'none';
     document.getElementById('summary-section').style.display = 'none';
@@ -207,17 +287,38 @@ if (!orderId) {
     document.getElementById('error-message').textContent = message;
   }
 
+  // ==========================================
+  // Event Listeners
+  // ==========================================
+  
   // Bouton réessayer
   document.getElementById('retry-btn')?.addEventListener('click', () => {
     document.getElementById('error-section').style.display = 'none';
+    document.getElementById('summary-section').style.display = 'none';
     document.getElementById('loading-section').style.display = 'flex';
     createCheckoutSession();
   });
 
+  // ==========================================
+  // Initialisation
+  // ==========================================
+  loadConfig();
+
   // Lancer la création de la session au chargement
   if (orderId) {
+    console.log('🚀 Initialisation Stripe Checkout pour:', orderId);
     createCheckoutSession();
   } else {
     showError('Aucune commande spécifiée');
   }
+
+  // Empêcher le retour arrière accidentel
+  let isRedirecting = false;
+  window.addEventListener('beforeunload', (e) => {
+    if (!isRedirecting && document.getElementById('loading-section').style.display !== 'none') {
+      e.preventDefault();
+      e.returnValue = '';
+      return 'Êtes-vous sûr de vouloir quitter ? Votre session de paiement sera perdue.';
+    }
+  });
 </script>

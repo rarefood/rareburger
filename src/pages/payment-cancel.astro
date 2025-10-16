@@ -9,12 +9,14 @@ import '../assets/app.css';
 
 const orderId = Astro.url.searchParams.get('order');
 const reason = Astro.url.searchParams.get('reason');
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+
+// ❌ SUPPRIMÉ: Plus besoin de ces variables
+// const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+// const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr" >
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -133,28 +135,36 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
 </body>
 </html>
 
-<script define:vars={{ orderId, reason, restaurantId, apiBaseUrl }}>
+<!-- Script 1 : Config et imports -->
+<script>
+  import api from '../lib/api';
+
   // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/config`);
-      const config = await response.json();
+      const config = await api.config.get();
       
       if (config.theme?.daisy) {
         document.documentElement.setAttribute('data-theme', config.theme.daisy);
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${restaurantId}/${config.theme.logo}`;
+        const logoUrl = api.images.getUrl(config.theme.logo);
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }
     } catch (error) {
-      console.error('Erreur config:', error);
+      console.error('❌ Erreur config:', error);
+      document.documentElement.setAttribute('data-theme', 'autumn');
     }
   }
 
   loadConfig();
+</script>
+
+<!-- Script 2 : Logique métier -->
+<script define:vars={{ orderId, reason }}>
+  import api from '../lib/api';
 
   // Messages selon la raison
   const reasonMessages = {
@@ -231,7 +241,15 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     if (!orderId) return;
 
     try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/commandes/${orderId}`);
+      // ⚠️ Cette route nécessite probablement un token admin
+      // Pour l'instant on essaye sans token (route publique pour tracking)
+      // Si ça échoue, c'est normal - le client ne peut pas accéder aux détails de commande sans auth
+      
+      // Note: Si tu veux que les clients puissent voir leur commande sans être admin,
+      // il faudrait créer une route publique spécifique dans le backend comme:
+      // GET /api/commandes/track/{order_id}?email={email}
+      
+      const response = await fetch(`${api.API_BASE_URL}/commandes/${orderId}`);
       if (response.ok) {
         const order = await response.json();
         
@@ -245,9 +263,13 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
         retryBtn.addEventListener('click', () => {
           window.location.href = `/stripe-checkout?order=${orderId}`;
         });
+      } else {
+        console.warn('⚠️ Impossible de charger les détails de la commande (besoin authentification admin)');
+        // Pas grave, on continue sans afficher le numéro de commande
       }
     } catch (error) {
-      console.error('Erreur chargement commande:', error);
+      console.error('❌ Erreur chargement commande:', error);
+      // Pas grave, la page fonctionne quand même
     }
   }
 
@@ -256,7 +278,6 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
     
     if (cart.length === 0) {
-      // Si le panier est vide, cacher le bouton "retour au panier"
       console.log('⚠️ Panier vide');
     } else {
       console.log(`✅ Panier conservé: ${cart.length} articles`);

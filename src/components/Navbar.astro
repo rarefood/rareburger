@@ -4,7 +4,7 @@
 // 🧭 CMDOLA - Navigation Bar avec DaisyUI
 // ============================================
 
-import { api } from '../lib/api';
+import api from '../lib/api'; // ✅ Import par défaut
 
 interface Props {
   restaurantName?: string;
@@ -30,6 +30,7 @@ const {
 let displayName = restaurantName;
 if (!displayName) {
   try {
+    // ✅ Utilise déjà api.config.get() correctement (pas de restaurant_id)
     const config = await api.config.get();
     displayName = config.nom || 'CMDOLA';
   } catch (error) {

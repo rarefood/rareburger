@@ -9,11 +9,13 @@ interface Props {
 }
 
 const { title = 'Admin' } = Astro.props;
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+
+// ❌ SUPPRIMÉ: Plus besoin de RESTAURANT_ID
+// const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr" >
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,41 +23,51 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
   <title>{title} - CMDOLA Admin</title>
   <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
 </head>
-<body class="min-h-screen flex flex-col">
-  
-  <AdminNavbar />
 
+<body class="min-h-screen flex flex-col">
+ 
+  <AdminNavbar />
+  
   <main class="flex-1 container mx-auto px-4 py-6 max-w-7xl">
     <slot />
   </main>
-
+  
   <AdminFooter />
+  
+  <script>
+    // ✅ Importer api.ts côté client
+    import api from '../lib/api';
 
-  <script define:vars={{ RESTAURANT_ID }}>
     async function loadConfig() {
       try {
-        const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
-        const config = await response.json();
-        
+        // ✅ Utiliser api.ts au lieu de fetch direct
+        const config = await api.config.get();
+       
         // Appliquer le thème DaisyUI
         if (config.theme?.daisy) {
           document.documentElement.setAttribute('data-theme', config.theme.daisy);
         }
-        
-        // Construire l'URL complète du logo
+       
+        // ✅ Utiliser le helper api.images.getUrl()
         if (config.theme?.logo) {
-          const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+          const logoUrl = api.images.getUrl(config.theme.logo);
           const favicon = document.getElementById('favicon');
           if (favicon) {
             favicon.href = logoUrl;
           }
         }
       } catch (error) {
-        console.error('Erreur chargement config:', error);
+        console.error('❌ Erreur chargement config:', error);
+        // Thème par défaut en cas d'erreur
+        document.documentElement.setAttribute('data-theme', 'autumn');
       }
     }
 
+    // Charger au démarrage
     loadConfig();
+
+    // Support Astro View Transitions
+    document.addEventListener('astro:page-load', loadConfig);
   </script>
 
 </body>

@@ -1,35 +1,53 @@
 // src/lib/api.ts
 // ============================================
-// 🚀 CMDOLA API Client - Version simplifiée
+// 🚀 CMDOLA API Client - Version Complète
 // ============================================
 
 // ============================================
-// 🎯 CONFIGURATION - Change ici le restaurant !
+// 🎯 CONFIGURATION
 // ============================================
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
-// Helper pour obtenir le restaurant ID
-function getRestaurantId(override?: string): string {
-  return override || RESTAURANT_ID;
+// ============================================
+// Helper pour récupérer le token JWT
+// ============================================
+function getAuthToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    const [name, value] = cookie.trim().split('=');
+    if (name === 'admin_token') {
+      return value;
+    }
+  }
+  return null;
 }
 
 // ============================================
 // Helper pour les requêtes fetch
 // ============================================
 async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
-  console.log('🔍 Tentative fetch:', url);
+  console.log('🔍 API Fetch:', url);
   
   try {
+    // Ajouter le token d'authentification si disponible
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
-    console.log('✅ Fetch réussi:', response.status);
+    console.log('✅ Response:', response.status);
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({
@@ -40,17 +58,10 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
 
     return await response.json();
   } catch (error) {
-    console.error('❌ API Error détaillée:', {
+    console.error('❌ API Error:', {
       message: error instanceof Error ? error.message : 'Unknown error',
-      cause: error instanceof Error ? error.cause : undefined,
-      stack: error instanceof Error ? error.stack : undefined,
       url: url
     });
-    
-    if (error instanceof Error && error.message.includes('fetch failed')) {
-      console.warn('⚠️  Serveur API non accessible depuis Node.js');
-      return {} as T;
-    }
     throw error;
   }
 }
@@ -59,12 +70,46 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
 // 🔐 AUTH - Authentification
 // ============================================
 export const auth = {
-  login: async (username: string, password: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/auth/login`, {
+  /**
+   * Connexion avec username/password
+   * Retourne le token JWT et les rôles
+   */
+  login: async (username: string, password: string) => {
+    return apiFetch<{
+      success: boolean;
+      token: string;
+      username: string;
+      name: string;
+      roles: string[];
+      restaurant: { id: string; nom: string };
+    }>(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
+  },
+
+  /**
+   * Vérifier si le token est valide
+   */
+  verify: async () => {
+    return apiFetch<{
+      valid: boolean;
+      username?: string;
+      roles?: string[];
+      restaurant?: string;
+    }>(`${API_BASE_URL}/auth/verify`);
+  },
+
+  /**
+   * Récupérer les infos de l'utilisateur connecté
+   */
+  me: async () => {
+    return apiFetch<{
+      username: string;
+      roles: string[];
+      name: string;
+      restaurant: string;
+    }>(`${API_BASE_URL}/auth/me`);
   },
 };
 
@@ -72,14 +117,18 @@ export const auth = {
 // ⚙️ CONFIG - Configuration
 // ============================================
 export const config = {
-  get: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/config`);
+  /**
+   * Récupérer la configuration du restaurant
+   */
+  get: async () => {
+    return apiFetch(`${API_BASE_URL}/config`);
   },
 
-  update: async (data: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/config`, {
+  /**
+   * Mettre à jour la configuration (admin uniquement)
+   */
+  update: async (data: any) => {
+    return apiFetch(`${API_BASE_URL}/config`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
@@ -90,35 +139,30 @@ export const config = {
 // 🍽️ MENU - Gestion du menu
 // ============================================
 export const menu = {
-  get: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/menu`);
+  get: async () => {
+    return apiFetch(`${API_BASE_URL}/menu`);
   },
 
-  addProduct: async (product: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/menu`, {
+  addProduct: async (product: any) => {
+    return apiFetch(`${API_BASE_URL}/menu`, {
       method: 'POST',
       body: JSON.stringify(product),
     });
   },
 
-  getProduct: async (productId: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/menu/${productId}`);
+  getProduct: async (productId: string) => {
+    return apiFetch(`${API_BASE_URL}/menu/${productId}`);
   },
 
-  updateProduct: async (productId: string, data: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/menu/${productId}`, {
+  updateProduct: async (productId: string, data: any) => {
+    return apiFetch(`${API_BASE_URL}/menu/${productId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
 
-  deleteProduct: async (productId: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/menu/${productId}`, {
+  deleteProduct: async (productId: string) => {
+    return apiFetch(`${API_BASE_URL}/menu/${productId}`, {
       method: 'DELETE',
     });
   },
@@ -128,51 +172,100 @@ export const menu = {
 // 📦 COMMANDES - Gestion des commandes
 // ============================================
 export const commandes = {
-  list: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes`);
+  /**
+   * Liste toutes les commandes (admin uniquement)
+   */
+  list: async () => {
+    return apiFetch(`${API_BASE_URL}/commandes`);
   },
 
-  create: async (data: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes`, {
+
+  /**
+  * Liste des commandes archivées (terminées ou annulées)
+  * Accessible aux admins et chefs avec filtres
+  */
+  listArchives: async (period?: 'today' | 'week' | 'month' | 'all', statut?: 'terminee' | 'annulee' | 'all') => {
+    const params = new URLSearchParams();
+    if (period) params.append('period', period);
+    if (statut) params.append('statut', statut);
+  
+    const query = params.toString() ? `?${params.toString()}` : '';
+  
+    return apiFetch<{
+      commandes: any[];
+      total: number;
+    }>(`${API_BASE_URL}/commandes/archives${query}`);
+  },
+
+
+  /**
+   * Liste des commandes actives (public - pour cuisine)
+   * Exclut terminées, annulées et paiements en attente
+   */
+  listActives: async () => {
+    return apiFetch<{
+      commandes: any[];
+      total: number;
+    }>(`${API_BASE_URL}/commandes/actives`);
+  },
+
+  /**
+   * Créer une nouvelle commande (public - depuis le site)
+   */
+  create: async (data: any) => {
+    return apiFetch(`${API_BASE_URL}/commandes`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  get: async (commandeId: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes/${commandeId}`);
+  /**
+   * Récupérer une commande par son ID (admin uniquement)
+   */
+  get: async (commandeId: string) => {
+    return apiFetch(`${API_BASE_URL}/commandes/${commandeId}`);
   },
 
-  update: async (commandeId: string, data: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes/${commandeId}`, {
+  /**
+   * Récupérer une commande publiquement (par ID)
+   */
+  getPublic: async (commandeId: string) => {
+    return apiFetch(`${API_BASE_URL}/commandes/public/${commandeId}`);
+  },
+
+  /**
+   * Tracker une commande par son numéro (public)
+   */
+  track: async (numero: string) => {
+    return apiFetch(`${API_BASE_URL}/commandes/track/${numero}`);
+  },
+
+  /**
+   * Mettre à jour une commande (admin uniquement)
+   */
+  update: async (commandeId: string, data: any) => {
+    return apiFetch(`${API_BASE_URL}/commandes/${commandeId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
 
-  delete: async (commandeId: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes/${commandeId}`, {
+  /**
+   * Supprimer une commande (admin uniquement)
+   */
+  delete: async (commandeId: string) => {
+    return apiFetch(`${API_BASE_URL}/commandes/${commandeId}`, {
       method: 'DELETE',
     });
   },
 
-  updateStatus: async (commandeId: string, statut: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes/${commandeId}/status`, {
+  /**
+   * Changer le statut d'une commande (admin ou chef)
+   */
+  updateStatus: async (commandeId: string, statut: string) => {
+    return apiFetch(`${API_BASE_URL}/commandes/${commandeId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ statut }),
-    });
-  },
-
-  print: async (commandeId: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/commandes/${commandeId}/print`, {
-      method: 'POST',
     });
   },
 };
@@ -181,13 +274,17 @@ export const commandes = {
 // 🖼️ IMAGES - Gestion des images
 // ============================================
 export const images = {
-  upload: async (file: File, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
+  upload: async (file: File) => {
     const formData = new FormData();
     formData.append('image', file);
+    
+    const token = getAuthToken();
 
-    const response = await fetch(`${API_BASE_URL}/${id}/upload-image`, {
+    const response = await fetch(`${API_BASE_URL}/upload-image`, {
       method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
       body: formData,
     });
 
@@ -199,21 +296,18 @@ export const images = {
     return response.json();
   },
 
-  delete: async (filename: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/delete-image/${filename}`, {
+  delete: async (filename: string) => {
+    return apiFetch(`${API_BASE_URL}/delete-image/${filename}`, {
       method: 'DELETE',
     });
   },
 
-  list: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/images`);
+  list: async () => {
+    return apiFetch(`${API_BASE_URL}/images`);
   },
 
-  getUrl: (filename: string, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return `${API_BASE_URL}/images/${id}/${filename}`;
+  getUrl: (filename: string) => {
+    return `${API_BASE_URL}/images/${filename}`;
   },
 };
 
@@ -221,58 +315,13 @@ export const images = {
 // 📊 STATS - Statistiques
 // ============================================
 export const stats = {
-  general: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/stats`);
+  general: async () => {
+    return apiFetch(`${API_BASE_URL}/stats`);
   },
 
-  period: async (period: 'today' | 'week' | 'month', restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/stats/${period}`);
-  },
-
-  hours: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/analytics/hours`);
-  },
-
-  days: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/analytics/days`);
-  },
-};
-
-// ============================================
-// 📥 EXPORT - Export des données
-// ============================================
-export const exportData = {
-  csv: async (period: 'today' | 'week' | 'month' | 'all', restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    const url = `${API_BASE_URL}/${id}/export/${period}`;
-    window.open(url, '_blank');
-  },
-
-  getUrl: (period: 'today' | 'week' | 'month' | 'all', restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return `${API_BASE_URL}/${id}/export/${period}`;
-  },
-};
-
-// ============================================
-// 👥 CLIENT - API publique
-// ============================================
-export const client = {
-  getMenu: async (restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/client/menu`);
-  },
-
-  createOrder: async (data: any, restaurantId?: string) => {
-    const id = getRestaurantId(restaurantId);
-    return apiFetch(`${API_BASE_URL}/${id}/client/commande`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  getExportUrl: (period: 'today' | 'week' | 'month' | 'all') => {
+    const token = getAuthToken();
+    return `${API_BASE_URL}/export/${period}?token=${token}`;
   },
 };
 
@@ -282,6 +331,25 @@ export const client = {
 export const health = {
   check: async () => {
     return apiFetch(`${API_BASE_URL}/health`);
+  },
+
+  checkDeep: async () => {
+    return apiFetch(`${API_BASE_URL}/health?deep=true`);
+  },
+};
+
+// ============================================
+// 💳 STRIPE - Paiement en ligne
+// ============================================
+export const stripe = {
+  createCheckoutSession: async (orderId: string) => {
+    return apiFetch<{
+      session_id: string;
+      url: string;
+    }>(`${API_BASE_URL}/stripe/create-checkout-session`, {
+      method: 'POST',
+      body: JSON.stringify({ order_id: orderId }),
+    });
   },
 };
 
@@ -295,13 +363,9 @@ export const api = {
   commandes,
   images,
   stats,
-  exportData,
-  client,
   health,
-  
-  // Export du restaurant ID actuel
-  getRestaurantId,
-  RESTAURANT_ID,
+  stripe,
+  API_BASE_URL,
 };
 
 export default api;

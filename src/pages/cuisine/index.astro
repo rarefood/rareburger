@@ -4,17 +4,14 @@ import "../../assets/app.css";
 
 export const prerender = false;
 
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-
-// Vérification auth chef
-const token = Astro.cookies.get('chef_token')?.value;
-if (!token) {
-  return Astro.redirect('/cuisine/login');
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login');
 }
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -110,13 +107,13 @@ if (!token) {
         <span id="autoRefreshIcon">🔄</span>
       </button>
 
+
       <!-- Archives -->
       <a href="/cuisine/archives" class="btn btn-ghost btn-circle" title="Archives">
         📦
       </a>
-
       <!-- Déconnexion -->
-      <a href="/cuisine/logout" class="btn btn-error btn-circle" title="Fin de service">
+      <a href="/logout" class="btn btn-error btn-circle" title="Fin de service">
         🚪
       </a>
     </div>
@@ -244,7 +241,7 @@ if (!token) {
       <div class="divider"></div>
 
       <!-- Actions -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         
         <!-- Changer statut -->
         <div class="form-control">
@@ -267,13 +264,6 @@ if (!token) {
           </button>
         </div>
 
-        <!-- Bouton imprimer -->
-        <div class="flex items-end">
-          <button id="imprimerTicket" class="btn btn-ghost btn-lg btn-block">
-            🖨️ Imprimer
-          </button>
-        </div>
-
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">
@@ -289,110 +279,106 @@ if (!token) {
 </body>
 </html>
 
-<script define:vars={{ RESTAURANT_ID }}>
-  let allCommandes = [];
-  let filteredCommandes = [];
-  let currentFilter = 'all';
-  let autoRefreshInterval = null;
-  let autoRefreshEnabled = true;
-  let lastCommandeCount = 0;
-  let currentCommandeId = null;
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../../lib/api';
 
-  // Charger config et thème
-  async function loadConfig() {
-    try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        const navLogo = document.getElementById('navLogo');
-        if (favicon) favicon.href = logoUrl;
-        if (navLogo) navLogo.src = logoUrl;
-      }
+// ==========================================
+// Variables Globales
+// ==========================================
+let allCommandes = [];
+let filteredCommandes = [];
+let currentFilter = 'all';
+let autoRefreshInterval = null;
+let autoRefreshEnabled = true;
+let lastCommandeCount = 0;
+let currentCommandeId = null;
 
-      if (config.nom) {
-        const nameEl = document.getElementById('restaurantName');
-        if (nameEl) nameEl.textContent = config.nom;
-      }
-
-      // Charger le nom du chef
-      const chefInfo = localStorage.getItem('chef_info');
-      if (chefInfo) {
-        const chef = JSON.parse(chefInfo);
-        const chefNameEl = document.getElementById('chefName');
-        if (chefNameEl) chefNameEl.textContent = `Chef ${chef.nom || chef.username}`;
-      }
-    } catch (error) {
-      console.error('Erreur config:', error);
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    const config = await api.config.get();
+    
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
-  }
-
-  // Formater le temps écoulé
-  function getTimeElapsed(dateStr) {
-    const now = new Date();
-    const orderDate = new Date(dateStr);
-    const diffMs = now - orderDate;
-    const diffMins = Math.floor(diffMs / 60000);
     
-    if (diffMins < 1) return { text: "À l'instant", urgent: false };
-    if (diffMins === 1) return { text: "Il y a 1 min", urgent: false };
-    if (diffMins < 15) return { text: `Il y a ${diffMins} min`, urgent: false };
-    if (diffMins < 30) return { text: `Il y a ${diffMins} min`, urgent: true };
-    if (diffMins < 60) return { text: `Il y a ${diffMins} min ⚠️`, urgent: true };
-    
-    const diffHours = Math.floor(diffMins / 60);
-    return { text: `Il y a ${diffHours}h${diffMins % 60}`, urgent: true };
-  }
+    if (config.theme?.logo) {
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      const navLogo = document.getElementById('navLogo');
+      if (favicon) favicon.href = logoUrl;
+      if (navLogo) navLogo.src = logoUrl;
+    }
 
-  // Icône et couleur selon type
-  function getTypeInfo(type) {
-    const types = {
-      'sur_place': { icon: '🍽️', badge: 'badge-success', label: 'Sur place' },
-      'emporter': { icon: '🥡', badge: 'badge-info', label: 'À emporter' },
-      'livraison': { icon: '🚚', badge: 'badge-primary', label: 'Livraison' }
-    };
-    return types[type] || { icon: '📦', badge: 'badge-ghost', label: type };
+    if (config.nom) {
+      const nameEl = document.getElementById('restaurantName');
+      if (nameEl) nameEl.textContent = config.nom;
+    }
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
   }
+}
 
-  // Formater prix
-  function formatPrice(price) {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(price);
-  }
+// ==========================================
+// Utilitaires
+// ==========================================
+function getTimeElapsed(dateStr) {
+  const now = new Date();
+  const orderDate = new Date(dateStr);
+  const diffMs = now - orderDate;
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return { text: "À l'instant", urgent: false };
+  if (diffMins === 1) return { text: "Il y a 1 min", urgent: false };
+  if (diffMins < 15) return { text: `Il y a ${diffMins} min`, urgent: false };
+  if (diffMins < 30) return { text: `Il y a ${diffMins} min`, urgent: true };
+  if (diffMins < 60) return { text: `Il y a ${diffMins} min ⚠️`, urgent: true };
+  
+  const diffHours = Math.floor(diffMins / 60);
+  return { text: `Il y a ${diffHours}h${diffMins % 60}`, urgent: true };
+}
 
-  // Charger les commandes
-  // Charger les commandes
+function getTypeInfo(type) {
+  const types = {
+    'sur_place': { icon: '🍽️', badge: 'badge-success', label: 'Sur place' },
+    'emporter': { icon: '🥡', badge: 'badge-info', label: 'À emporter' },
+    'livraison': { icon: '🚚', badge: 'badge-primary', label: 'Livraison' }
+  };
+  return types[type] || { icon: '📦', badge: 'badge-ghost', label: type };
+}
+
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+}
+
+function playNotificationSound() {
+  const audio = document.getElementById('notificationSound');
+  audio.play().catch(e => console.log('Son bloqué:', e));
+}
+
+// ==========================================
+// Chargement Commandes
+// ==========================================
 async function loadCommandes(silent = false) {
   if (!silent) {
     document.getElementById('refreshIndicator').classList.remove('hidden');
   }
 
   try {
-    const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes`);
-    const data = await response.json();
+    console.log('🔄 Chargement commandes actives...');
     
-    // ✅ NOUVEAU : Filtrer les commandes
-    allCommandes = (data.commandes || []).filter(cmd => {
-      // Exclure terminées et annulées
-      if (cmd.statut === 'terminee' || cmd.statut === 'annulee') {
-        return false;
-      }
-      
-      // ✅ Exclure les paiements en ligne en attente
-      if (cmd.paiement?.mode === 'en_ligne' && cmd.paiement?.statut === 'en_attente_paiement') {
-        return false;
-      }
-      
-      return true;
-    });
+    // ✅ Utilise api.ts
+    const data = await api.commandes.listActives();
+    
+    allCommandes = data.commandes || [];
 
     // Trier par date (plus anciennes en premier)
     allCommandes.sort((a, b) => new Date(a.date_creation) - new Date(b.date_creation));
@@ -403,11 +389,13 @@ async function loadCommandes(silent = false) {
     }
     lastCommandeCount = allCommandes.length;
 
+    console.log(`✅ ${allCommandes.length} commandes chargées`);
+
     applyFilter();
     updateCounters();
 
   } catch (error) {
-    console.error('Erreur chargement commandes:', error);
+    console.error('❌ Erreur chargement commandes:', error);
   } finally {
     if (!silent) {
       setTimeout(() => {
@@ -417,273 +405,268 @@ async function loadCommandes(silent = false) {
   }
 }
 
-
-  // Jouer le son de notification
-  function playNotificationSound() {
-    const audio = document.getElementById('notificationSound');
-    audio.play().catch(e => console.log('Son bloqué:', e));
+// ==========================================
+// Filtrage & Affichage
+// ==========================================
+function applyFilter() {
+  if (currentFilter === 'all') {
+    filteredCommandes = [...allCommandes];
+  } else {
+    filteredCommandes = allCommandes.filter(cmd => cmd.type === currentFilter);
   }
+  renderKanban();
+}
 
-  // Appliquer le filtre
-  function applyFilter() {
-    if (currentFilter === 'all') {
-      filteredCommandes = [...allCommandes];
-    } else {
-      filteredCommandes = allCommandes.filter(cmd => cmd.type === currentFilter);
-    }
-    renderKanban();
-  }
+function updateCounters() {
+  const nouvelles = filteredCommandes.filter(c => c.statut === 'nouvelle').length;
+  const enPreparation = filteredCommandes.filter(c => c.statut === 'en_preparation').length;
+  const pretes = filteredCommandes.filter(c => c.statut === 'prete' || c.statut === 'en_livraison').length;
 
-  // Mettre à jour les compteurs
-  function updateCounters() {
-    const nouvelles = filteredCommandes.filter(c => c.statut === 'nouvelle').length;
-    const enPreparation = filteredCommandes.filter(c => c.statut === 'en_preparation').length;
-    const pretes = filteredCommandes.filter(c => c.statut === 'prete' || c.statut === 'en_livraison').length;
+  document.getElementById('countNouvelles').textContent = nouvelles;
+  document.getElementById('countEnPreparation').textContent = enPreparation;
+  document.getElementById('countPretes').textContent = pretes;
+}
 
-    document.getElementById('countNouvelles').textContent = nouvelles;
-    document.getElementById('countEnPreparation').textContent = enPreparation;
-    document.getElementById('countPretes').textContent = pretes;
-  }
+function renderKanban() {
+  renderColumn('nouvelle', 'colonneNouvelles');
+  renderColumn('en_preparation', 'colonneEnPreparation');
+  renderColumn(['prete', 'en_livraison'], 'colonnePretes');
+}
 
-  // Render le Kanban
-  function renderKanban() {
-    renderColumn('nouvelle', 'colonneNouvelles');
-    renderColumn('en_preparation', 'colonneEnPreparation');
-    renderColumn(['prete', 'en_livraison'], 'colonnePretes');
-  }
+function renderColumn(statut, containerId) {
+  const container = document.getElementById(containerId);
+  const statuts = Array.isArray(statut) ? statut : [statut];
+  const commandes = filteredCommandes.filter(c => statuts.includes(c.statut));
 
-  // Render une colonne
-  function renderColumn(statut, containerId) {
-    const container = document.getElementById(containerId);
-    const statuts = Array.isArray(statut) ? statut : [statut];
-    const commandes = filteredCommandes.filter(c => statuts.includes(c.statut));
-
-    if (commandes.length === 0) {
-      container.innerHTML = `
-        <div class="card bg-base-100 shadow-sm opacity-50">
-          <div class="card-body text-center py-8">
-            <p class="text-base-content/60">Aucune commande</p>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = commandes.map(cmd => {
-      const typeInfo = getTypeInfo(cmd.type);
-      const timeInfo = getTimeElapsed(cmd.date_creation);
-      const articleCount = cmd.articles.reduce((sum, a) => sum + a.quantite, 0);
-      const isNew = statut === 'nouvelle';
-
-      return `
-        <div class="card bg-base-100 shadow-lg hover:shadow-2xl order-card ${isNew ? 'new-order-pulse' : ''}" 
-             data-id="${cmd.id}" 
-             onclick="openDetailModal('${cmd.id}')">
-          <div class="card-body p-4">
-            
-            <!-- Header -->
-            <div class="flex justify-between items-start mb-2">
-              <div>
-                <h3 class="card-title text-xl font-mono">#${cmd.numero}</h3>
-                <div class="flex gap-1 mt-1">
-                  <span class="badge ${typeInfo.badge} badge-sm">
-                    ${typeInfo.icon} ${typeInfo.label}
-                  </span>
-                </div>
-              </div>
-              <span class="badge badge-lg ${timeInfo.urgent ? 'badge-error time-urgent' : 'badge-ghost'}">
-                ${timeInfo.text}
-              </span>
-            </div>
-
-            <!-- Info client -->
-            <div class="text-sm text-base-content/70">
-              <div class="font-bold">${cmd.client?.prenom || ''} ${cmd.client?.nom || 'Client'}</div>
-              ${cmd.numero_table ? `<div>Table ${cmd.numero_table}</div>` : ''}
-            </div>
-
-            <!-- Résumé articles -->
-            <div class="flex justify-between items-center mt-2 pt-2 border-t">
-              <span class="text-sm">${articleCount} article${articleCount > 1 ? 's' : ''}</span>
-              <span class="font-bold text-lg">${formatPrice(cmd.prix_total)}</span>
-            </div>
-
-            ${cmd.notes ? `
-              <div class="alert alert-warning alert-sm mt-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <span class="text-xs">Instructions spéciales</span>
-              </div>
-            ` : ''}
-
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  // Ouvrir modal détail
-  window.openDetailModal = function(commandeId) {
-    const commande = allCommandes.find(c => c.id === commandeId);
-    if (!commande) return;
-
-    currentCommandeId = commandeId;
-    const typeInfo = getTypeInfo(commande.type);
-
-    document.getElementById('modalNumero').textContent = `#${commande.numero}`;
-    document.getElementById('modalType').textContent = `${typeInfo.icon} ${typeInfo.label}`;
-    document.getElementById('modalType').className = `badge badge-lg ${typeInfo.badge}`;
-    
-    const timeInfo = getTimeElapsed(commande.date_creation);
-    document.getElementById('modalTemps').textContent = timeInfo.text;
-    document.getElementById('modalTemps').className = `badge badge-lg ${timeInfo.urgent ? 'badge-error' : 'badge-ghost'}`;
-
-    document.getElementById('modalClient').textContent = `${commande.client?.prenom || ''} ${commande.client?.nom || 'Client'}`;
-    document.getElementById('modalTelephone').textContent = commande.client?.telephone || '';
-
-    // Adresse si livraison
-    const modalAdresse = document.getElementById('modalAdresse');
-    if (commande.type === 'livraison' && commande.client?.adresse) {
-      const addr = commande.client.adresse;
-      document.getElementById('modalAdresseTexte').textContent = 
-        `${addr.rue} ${addr.numero}, ${addr.code_postal} ${addr.ville}`;
-      modalAdresse.classList.remove('hidden');
-    } else {
-      modalAdresse.classList.add('hidden');
-    }
-
-    // Table si sur place
-    const modalTable = document.getElementById('modalTable');
-    if (commande.numero_table) {
-      document.getElementById('modalTableNumero').textContent = commande.numero_table;
-      modalTable.classList.remove('hidden');
-    } else {
-      modalTable.classList.add('hidden');
-    }
-
-    // Articles
-    const articlesHtml = commande.articles.map(article => `
-      <div class="card bg-base-200">
-        <div class="card-body p-4">
-          <div class="flex justify-between items-start">
-            <div class="flex-1">
-              <div class="flex items-center gap-2">
-                <span class="badge badge-lg badge-primary">${article.quantite}x</span>
-                <span class="font-bold text-lg">${article.nom}</span>
-              </div>
-              ${article.supplements && article.supplements.length > 0 ? `
-                <div class="text-sm text-success mt-2">
-                  + ${article.supplements.map(s => s.name).join(', ')}
-                </div>
-              ` : ''}
-              ${article.removed_ingredients && article.removed_ingredients.length > 0 ? `
-                <div class="text-sm text-error mt-1">
-                  Sans: ${article.removed_ingredients.join(', ')}
-                </div>
-              ` : ''}
-            </div>
-            <span class="font-bold text-xl">${formatPrice(article.prix * article.quantite)}</span>
-          </div>
+  if (commandes.length === 0) {
+    container.innerHTML = `
+      <div class="card bg-base-100 shadow-sm opacity-50">
+        <div class="card-body text-center py-8">
+          <p class="text-base-content/60">Aucune commande</p>
         </div>
       </div>
-    `).join('');
-    document.getElementById('modalArticles').innerHTML = articlesHtml;
+    `;
+    return;
+  }
 
-    // Notes
-    const modalNotes = document.getElementById('modalNotes');
-    if (commande.notes) {
-      document.getElementById('modalNotesTexte').textContent = commande.notes;
-      modalNotes.classList.remove('hidden');
+  container.innerHTML = commandes.map(cmd => {
+    const typeInfo = getTypeInfo(cmd.type);
+    const timeInfo = getTimeElapsed(cmd.date_creation);
+    const articleCount = cmd.articles.reduce((sum, a) => sum + a.quantite, 0);
+    const isNew = statut === 'nouvelle';
+
+    return `
+      <div class="card bg-base-100 shadow-lg hover:shadow-2xl order-card ${isNew ? 'new-order-pulse' : ''}" 
+           data-id="${cmd.id}" 
+           onclick="openDetailModal('${cmd.id}')">
+        <div class="card-body p-4">
+          
+          <!-- Header -->
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="card-title text-xl font-mono">#${cmd.numero}</h3>
+              <div class="flex gap-1 mt-1">
+                <span class="badge ${typeInfo.badge} badge-sm">
+                  ${typeInfo.icon} ${typeInfo.label}
+                </span>
+              </div>
+            </div>
+            <span class="badge badge-lg ${timeInfo.urgent ? 'badge-error time-urgent' : 'badge-ghost'}">
+              ${timeInfo.text}
+            </span>
+          </div>
+
+          <!-- Info client -->
+          <div class="text-sm text-base-content/70">
+            <div class="font-bold">${cmd.client?.prenom || ''} ${cmd.client?.nom || 'Client'}</div>
+            ${cmd.numero_table ? `<div>Table ${cmd.numero_table}</div>` : ''}
+          </div>
+
+          <!-- Résumé articles -->
+          <div class="flex justify-between items-center mt-2 pt-2 border-t">
+            <span class="text-sm">${articleCount} article${articleCount > 1 ? 's' : ''}</span>
+            <span class="font-bold text-lg">${formatPrice(cmd.prix_total)}</span>
+          </div>
+
+          ${cmd.notes ? `
+            <div class="alert alert-warning alert-sm mt-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span class="text-xs">Instructions spéciales</span>
+            </div>
+          ` : ''}
+
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ==========================================
+// Modal Détail Commande
+// ==========================================
+window.openDetailModal = function(commandeId) {
+  const commande = allCommandes.find(c => c.id === commandeId);
+  if (!commande) return;
+
+  currentCommandeId = commandeId;
+  const typeInfo = getTypeInfo(commande.type);
+
+  document.getElementById('modalNumero').textContent = `#${commande.numero}`;
+  document.getElementById('modalType').textContent = `${typeInfo.icon} ${typeInfo.label}`;
+  document.getElementById('modalType').className = `badge badge-lg ${typeInfo.badge}`;
+  
+  const timeInfo = getTimeElapsed(commande.date_creation);
+  document.getElementById('modalTemps').textContent = timeInfo.text;
+  document.getElementById('modalTemps').className = `badge badge-lg ${timeInfo.urgent ? 'badge-error' : 'badge-ghost'}`;
+
+  document.getElementById('modalClient').textContent = `${commande.client?.prenom || ''} ${commande.client?.nom || 'Client'}`;
+  document.getElementById('modalTelephone').textContent = commande.client?.telephone || '';
+
+  // Adresse si livraison
+  const modalAdresse = document.getElementById('modalAdresse');
+  if (commande.type === 'livraison' && commande.client?.adresse) {
+    const addr = commande.client.adresse;
+    document.getElementById('modalAdresseTexte').textContent = 
+      `${addr.rue} ${addr.numero}, ${addr.code_postal} ${addr.ville}`;
+    modalAdresse.classList.remove('hidden');
+  } else {
+    modalAdresse.classList.add('hidden');
+  }
+
+  // Table si sur place
+  const modalTable = document.getElementById('modalTable');
+  if (commande.numero_table) {
+    document.getElementById('modalTableNumero').textContent = commande.numero_table;
+    modalTable.classList.remove('hidden');
+  } else {
+    modalTable.classList.add('hidden');
+  }
+
+  // Articles
+  const articlesHtml = commande.articles.map(article => `
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <span class="badge badge-lg badge-primary">${article.quantite}x</span>
+              <span class="font-bold text-lg">${article.nom}</span>
+            </div>
+            ${article.supplements && article.supplements.length > 0 ? `
+              <div class="text-sm text-success mt-2">
+                + ${article.supplements.map(s => s.name).join(', ')}
+              </div>
+            ` : ''}
+            ${article.removed_ingredients && article.removed_ingredients.length > 0 ? `
+              <div class="text-sm text-error mt-1">
+                Sans: ${article.removed_ingredients.join(', ')}
+              </div>
+            ` : ''}
+          </div>
+          <span class="font-bold text-xl">${formatPrice(article.prix * article.quantite)}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('modalArticles').innerHTML = articlesHtml;
+
+  // Notes
+  const modalNotes = document.getElementById('modalNotes');
+  if (commande.notes) {
+    document.getElementById('modalNotesTexte').textContent = commande.notes;
+    modalNotes.classList.remove('hidden');
+  } else {
+    modalNotes.classList.add('hidden');
+  }
+
+  // Statut actuel
+  document.getElementById('modalStatut').value = commande.statut;
+
+  detailModal.showModal();
+};
+
+// ==========================================
+// Changer Statut Commande
+// ==========================================
+document.getElementById('confirmerStatut').addEventListener('click', async () => {
+  const newStatut = document.getElementById('modalStatut').value;
+
+  try {
+    console.log(`🔄 Changement statut: ${currentCommandeId} → ${newStatut}`);
+    
+    // ✅ Utilise api.ts (token automatique)
+    await api.commandes.updateStatus(currentCommandeId, newStatut);
+    
+    console.log('✅ Statut mis à jour');
+
+    detailModal.close();
+    await loadCommandes();
+  } catch (error) {
+    console.error('❌ Erreur changement statut:', error);
+    
+    // Si erreur d'authentification
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
     } else {
-      modalNotes.classList.add('hidden');
-    }
-
-    // Statut actuel
-    document.getElementById('modalStatut').value = commande.statut;
-
-    detailModal.showModal();
-  };
-
-  // Confirmer changement statut
-  document.getElementById('confirmerStatut').addEventListener('click', async () => {
-    const newStatut = document.getElementById('modalStatut').value;
-
-    try {
-      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          statut: newStatut
-        })
-      });
-
-      detailModal.close();
-      await loadCommandes();
-    } catch (error) {
-      console.error('Erreur changement statut:', error);
       alert('Erreur lors du changement de statut');
     }
-  });
-
-  // Imprimer ticket
-  document.getElementById('imprimerTicket').addEventListener('click', async () => {
-    try {
-      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${currentCommandeId}/print`, {
-        method: 'POST'
-      });
-      alert('Ticket envoyé à l\'imprimante');
-    } catch (error) {
-      console.error('Erreur impression:', error);
-      alert('Erreur lors de l\'impression');
-    }
-  });
-
-  // Filtres
-  document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentFilter = btn.dataset.filter;
-      applyFilter();
-    });
-  });
-
-  // Auto-refresh
-  function startAutoRefresh() {
-    if (autoRefreshInterval) return;
-    autoRefreshInterval = setInterval(() => {
-      loadCommandes(true);
-    }, 10000); // 10 secondes
   }
+});
 
-  function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-      autoRefreshInterval = null;
-    }
-  }
-
-  document.getElementById('toggleAutoRefresh').addEventListener('click', () => {
-    autoRefreshEnabled = !autoRefreshEnabled;
-    const icon = document.getElementById('autoRefreshIcon');
-    
-    if (autoRefreshEnabled) {
-      startAutoRefresh();
-      icon.textContent = '🔄';
-    } else {
-      stopAutoRefresh();
-      icon.textContent = '⏸️';
-    }
+// ==========================================
+// Filtres
+// ==========================================
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    applyFilter();
   });
+});
 
-  // Init
-  loadConfig();
-  loadCommandes();
-  startAutoRefresh();
+// ==========================================
+// Auto-Refresh
+// ==========================================
+function startAutoRefresh() {
+  if (autoRefreshInterval) return;
+  autoRefreshInterval = setInterval(() => {
+    loadCommandes(true);
+  }, 10000); // 10 secondes
+}
 
-  // Cleanup au déchargement
-  window.addEventListener('beforeunload', stopAutoRefresh);
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+}
+
+document.getElementById('toggleAutoRefresh').addEventListener('click', () => {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  const icon = document.getElementById('autoRefreshIcon');
+  
+  if (autoRefreshEnabled) {
+    startAutoRefresh();
+    icon.textContent = '🔄';
+  } else {
+    stopAutoRefresh();
+    icon.textContent = '⏸️';
+  }
+});
+
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('👨‍🍳 Interface Cuisine chargée');
+  
+loadConfig();
+loadCommandes();
+startAutoRefresh();
+
+// Cleanup
+window.addEventListener('beforeunload', stopAutoRefresh);
 </script>
-
-</html>

@@ -205,7 +205,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
   async function loadCommandes() {
     try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes`);
+      const response = await fetch(`https://api.cmdola.be/api/$commandes`);
       const data = await response.json();
       allCommandes = data.commandes || [];
       applyFilters();
@@ -380,7 +380,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
   async function deleteCommande(id) {
     try {
-      await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/commandes/${id}`, {
+      await fetch(`https://api.cmdola.be/api/$commandes/${id}`, {
         method: 'DELETE'
       });
       await loadCommandes();

@@ -345,7 +345,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
+      const response = await fetch(`https://api.cmdola.be/api/$config`);
       configData = await response.json();
       populateAllSections();
       document.getElementById('loader').classList.add('hidden');
@@ -536,7 +536,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
     document.getElementById('themeDaisy').value = configData.theme?.daisy || 'autumn';
     
     if (configData.theme?.logo) {
-      const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${configData.theme.logo}`;
+      const logoUrl = `https://api.cmdola.be/api/images/$${configData.theme.logo}`;
       document.getElementById('logoPreview').src = logoUrl;
     }
   }
@@ -547,7 +547,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
   async function saveConfig(section) {
     try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`, {
+      const response = await fetch(`https://api.cmdola.be/api/$config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configData)
@@ -626,7 +626,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
       formData.append('image', logoFile);
       
       try {
-        const uploadResponse = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/upload-image`, {
+        const uploadResponse = await fetch(`https://api.cmdola.be/api/$upload-image`, {
           method: 'POST',
           body: formData
         });
@@ -815,7 +815,7 @@ window.deleteEmploye = async function(type, id) {
   delete configData[pluralTypes[type]][id];
   
   try {
-    await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`, {
+    await fetch(`https://api.cmdola.be/api/$config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(configData)
@@ -862,7 +862,7 @@ document.getElementById('saveEmployeBtn').addEventListener('click', async () => 
   };
   
   try {
-    await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`, {
+    await fetch(`https://api.cmdola.be/api/$config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(configData)

@@ -4,7 +4,7 @@
 // 📂 CMDOLA - Sélecteur de catégories horizontal
 // ============================================
 
-import { api } from '../lib/api';
+import api from '../lib/api'; // ✅ Import par défaut (plus propre)
 import "../assets/app.css";
 
 interface Props {
@@ -15,36 +15,33 @@ const {
   selectedCategory = 'all',
 } = Astro.props;
 
+// Catégories par défaut (fallback)
+const defaultCategories = [
+  { id: 'entrees', name: 'Entrées', icon: '🥗' },
+  { id: 'plats', name: 'Plats', icon: '🍽️' },
+  { id: 'pizzas', name: 'Pizzas', icon: '🍕' },
+  { id: 'burgers', name: 'Burgers', icon: '🍔' },
+  { id: 'boissons', name: 'Boissons', icon: '🥤' },
+  { id: 'desserts', name: 'Desserts', icon: '🍰' },
+];
+
 // Récupérer les catégories depuis l'API
 let categories: Array<{ id: string; name: string; icon: string }> = [];
 
 try {
+  // ✅ Utilise déjà api.ts correctement (pas de restaurant_id nécessaire)
   const menu = await api.menu.get();
   categories = menu.categories || [];
   
   // Si pas de catégories, utiliser les catégories par défaut
   if (categories.length === 0) {
     console.warn('⚠️  Aucune catégorie depuis l\'API, utilisation des catégories par défaut');
-    categories = [
-      { id: 'entrees', name: 'Entrées', icon: '🥗' },
-      { id: 'plats', name: 'Plats', icon: '🍽️' },
-      { id: 'pizzas', name: 'Pizzas', icon: '🍕' },
-      { id: 'burgers', name: 'Burgers', icon: '🍔' },
-      { id: 'boissons', name: 'Boissons', icon: '🥤' },
-      { id: 'desserts', name: 'Desserts', icon: '🍰' },
-    ];
+    categories = defaultCategories;
   }
 } catch (error) {
-  console.error('Erreur chargement catégories:', error);
-  // Catégories par défaut en cas d'erreur
-  categories = [
-    { id: 'entrees', name: 'Entrées', icon: '🥗' },
-    { id: 'plats', name: 'Plats', icon: '🍽️' },
-    { id: 'pizzas', name: 'Pizzas', icon: '🍕' },
-    { id: 'burgers', name: 'Burgers', icon: '🍔' },
-    { id: 'boissons', name: 'Boissons', icon: '🥤' },
-    { id: 'desserts', name: 'Desserts', icon: '🍰' },
-  ];
+  console.error('❌ Erreur chargement catégories:', error);
+  // ✅ Fallback sur les catégories par défaut en cas d'erreur
+  categories = defaultCategories;
 }
 
 // Ajouter "Tout" au début
@@ -185,7 +182,7 @@ const allCategories = [
         localStorage.setItem('selectedCategory', categoryId);
 
         // Log pour debug
-        console.log('Catégorie sélectionnée:', categoryId, categoryName);
+        console.log('✅ Catégorie sélectionnée:', categoryId, categoryName);
       });
     });
 

@@ -7,12 +7,13 @@
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+// ❌ SUPPRIMÉ: Plus besoin de ces variables
+// const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+// const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr" >
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -85,21 +86,24 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
 </body>
 </html>
 
-<script define:vars={{ restaurantId, apiBaseUrl }}>
+<script>
+  // ✅ Importer api.ts côté client
+  import api from '../lib/api';
+
   // Charger la configuration complète
   async function loadConfig() {
     try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/config`);
-      const config = await response.json();
+      // ✅ Utiliser api.ts au lieu de fetch direct
+      const config = await api.config.get();
       
       // Appliquer le thème DaisyUI
       if (config.theme?.daisy) {
         document.documentElement.setAttribute('data-theme', config.theme.daisy);
       }
       
-      // Appliquer le logo/favicon
+      // ✅ Utiliser le helper pour l'URL de l'image
       if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${restaurantId}/${config.theme.logo}`;
+        const logoUrl = api.images.getUrl(config.theme.logo);
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }
@@ -111,7 +115,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
       displayReseaux(config.reseaux_sociaux || {});
       
     } catch (error) {
-      console.error('Erreur config:', error);
+      console.error('❌ Erreur config:', error);
+      // Thème par défaut en cas d'erreur
+      document.documentElement.setAttribute('data-theme', 'autumn');
     }
   }
 

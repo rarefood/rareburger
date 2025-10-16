@@ -1,0 +1,14 @@
+---
+// src/pages/logout.astro
+// ============================================
+// 🚪 CMDOLA - Déconnexion
+// ============================================
+
+export const prerender = false;
+
+// Supprimer le cookie
+Astro.cookies.delete('admin_token', { path: '/' });
+
+// Rediriger vers la page de login
+return Astro.redirect('/login', 302);
+---

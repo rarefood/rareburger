@@ -7,10 +7,11 @@
 import Navbar from '../components/Navbar.astro';
 import CategorySelector from '../components/CategorySelector.astro';
 import ProductGrid from '../components/ProductGrid.astro';
-import { api } from '../lib/api';
+import api from '../lib/api'; // ✅ Import par défaut
 import "../assets/app.css";
 
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+// ❌ SUPPRIMÉ: Plus besoin de RESTAURANT_ID
+// const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
 
 // Récupérer les suppléments et la config
 let supplements = [];
@@ -20,6 +21,7 @@ let nextOpening = '';
 let currentSchedule: any[] = [];
 
 try {
+  // ✅ Utiliser api.ts pour tout
   const menu = await api.menu.get();
   supplements = menu.supplements || [];
   
@@ -35,9 +37,16 @@ try {
   currentSchedule = config.horaires?.[currentDay] || [];
   
   // Vérifier si l'heure actuelle est dans une des plages
-  isOpen = currentSchedule.some((plage: any) => {
+isOpen = currentSchedule.some((plage: any) => {
+  // Gérer les horaires qui passent minuit (ex: 11:30 - 02:00)
+  if (plage.fin < plage.debut) {
+    // Fermeture après minuit
+    return currentTime >= plage.debut || currentTime <= plage.fin;
+  } else {
+    // Fermeture le même jour
     return currentTime >= plage.debut && currentTime <= plage.fin;
-  });
+  }
+});
   
   // Si fermé, trouver la prochaine ouverture
   if (!isOpen && currentSchedule.length > 0) {
@@ -57,7 +66,7 @@ try {
   }
   
 } catch (error) {
-  console.error('Erreur chargement:', error);
+  console.error('❌ Erreur chargement:', error);
   supplements = [];
 }
 
@@ -66,7 +75,7 @@ const cartTotal = 0;
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr" >
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -135,29 +144,32 @@ const cartTotal = 0;
   }
 </style>
 
-<script define:vars={{ isOpen, RESTAURANT_ID }}>
+<script>
+  // ✅ Importer api.ts côté client
+  import api from '../lib/api';
+
   // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
-      const config = await response.json();
+      const config = await api.config.get();
       
       if (config.theme?.daisy) {
         document.documentElement.setAttribute('data-theme', config.theme.daisy);
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logoUrl = api.images.getUrl(config.theme.logo);
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }
     } catch (error) {
-      console.error('Erreur config:', error);
+      console.error('❌ Erreur config:', error);
     }
   }
 
   loadConfig();
-
+</script>
+<script define:vars={{ isOpen }}>
   // Mise à jour du badge panier
   function updateCartBadge() {
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
@@ -193,7 +205,6 @@ const cartTotal = 0;
 
   // Bloquer les commandes si restaurant fermé
   if (!isOpen) {
-    // Désactiver tous les boutons d'ajout
     setTimeout(() => {
       document.querySelectorAll('.btn-primary').forEach(btn => {
         if (btn.textContent.includes('Voir détails')) {
@@ -205,14 +216,13 @@ const cartTotal = 0;
       });
     }, 100);
     
-    // Empêcher l'ouverture des modals
     const originalOpenModal = window.openProductModal;
     window.openProductModal = function() {
       alert('Le restaurant est actuellement fermé. Les commandes seront disponibles lors de notre prochaine ouverture.');
     };
   }
 
-  // Changement de thème (Ctrl+T)
+  // Changement de thème (Ctrl+T pour debug)
   const themes = ['light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 'synthwave', 'cyberpunk'];
   let currentThemeIndex = 0;
 

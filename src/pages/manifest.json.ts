@@ -4,16 +4,16 @@ export const prerender = false;
 import type { APIRoute } from 'astro';
 
 const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.cmdola.be/api';
 
 export const GET: APIRoute = async () => {
   try {
     // Récupérer la config du restaurant
-    const configResponse = await fetch(`${API_BASE_URL}/${RESTAURANT_ID}/config`);
+    const configResponse = await fetch(`${API_BASE_URL}/$config`);
     const config = await configResponse.json();
 
     const logoUrl = config.theme?.logo 
-      ? `${API_BASE_URL}/images/${RESTAURANT_ID}/${config.theme.logo}`
+      ? `${API_BASE_URL}/images/$${config.theme.logo}`
       : '/favicon.ico';
 
     const restaurantName = config.nom || 'CMDOLA';

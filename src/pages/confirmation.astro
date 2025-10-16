@@ -1,19 +1,17 @@
 ---
 // src/pages/confirmation.astro
 // ============================================
-// ✅ CMDOLA - Page Confirmation Commande
+// ✅ CMDOLA - Page Confirmation Commande (CORRIGÉE)
 // ============================================
 
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
-const orderId = Astro.url.searchParams.get('order');
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -29,15 +27,15 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
   <div id="loading-initial" class="container mx-auto px-4 py-8">
     <div class="flex flex-col items-center justify-center min-h-[60vh]">
       <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-      <h2 class="text-2xl font-bold mb-2">Vérification de votre commande...</h2>
-      <p class="text-base-content/60">Veuillez patienter</p>
+      <h2 class="text-2xl font-bold mb-2" id="loading-title">Vérification de votre commande...</h2>
+      <p class="text-base-content/60" id="loading-subtitle">Veuillez patienter</p>
     </div>
   </div>
   
   <div id="main-content" class="container mx-auto px-4 py-8" style="display: none;">
     
-    <!-- Message de succès -->
-    <div class="alert alert-success shadow-lg mb-6">
+    <!-- Message de succès/erreur -->
+    <div id="alert-box" class="alert alert-success shadow-lg mb-6">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
@@ -122,11 +120,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
             
             <!-- Suivre la commande -->
             <button id="track-order-btn" class="btn btn-primary btn-block">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                Suivre ma commande
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Suivre ma commande
             </button>
             
             <div class="divider">OU</div>
@@ -170,30 +168,21 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
 </body>
 </html>
 
-<script define:vars={{ orderId, restaurantId, apiBaseUrl }}>
-  // Charger le thème et logo dynamiquement
-  async function loadConfig() {
-    try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/config`);
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${restaurantId}/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-    } catch (error) {
-      console.error('Erreur config:', error);
-    }
-  }
+<script define:vars={{ apiBaseUrl }}>
+  // ==========================================
+  // Configuration & Variables
+  // ==========================================
+  const orderId = new URLSearchParams(window.location.search).get('order');
+  let currentOrder = null;
+  let pollingInterval = null;
+  
+  const MAX_POLLING_ATTEMPTS = 20; // 20 tentatives
+  const POLLING_INTERVAL = 2000; // 2 secondes entre chaque tentative
+  let pollingAttempts = 0;
 
-  loadConfig();
-
-  // Formater prix
+  // ==========================================
+  // Utilitaires
+  // ==========================================
   function formatPrice(price) {
     return new Intl.NumberFormat('fr-BE', {
       style: 'currency',
@@ -201,7 +190,6 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     }).format(price);
   }
 
-  // Formater date
   function formatDate(isoDate) {
     const date = new Date(isoDate);
     return new Intl.DateTimeFormat('fr-BE', {
@@ -213,7 +201,6 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     }).format(date);
   }
 
-  // Traduction des statuts
   const statusLabels = {
     'nouvelle': 'Nouvelle',
     'en_preparation': 'En préparation',
@@ -223,98 +210,207 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     'terminee': 'Terminée',
     'annulee': 'Annulée'
   };
-  
-// Charger la commande avec retry pour attendre le webhook
-async function loadOrder(retryCount = 0) {
-  const MAX_RETRIES = 10; // 10 tentatives = ~5 secondes
-  const RETRY_DELAY = 500; // 500ms entre chaque tentative
-  
-  let order = null;
 
-  // ✅ TOUJOURS fetch depuis l'API pour les vérifications de paiement
-  if (orderId) {
+  // ==========================================
+  // Chargement Config
+  // ==========================================
+  async function loadConfig() {
     try {
-      const response = await fetch(`${apiBaseUrl}/${restaurantId}/commandes/${orderId}`);
-      if (response.ok) {
-        order = await response.json();
-        console.log('📡 Commande depuis API:', order);
+      const response = await fetch(`${apiBaseUrl}/config`);
+      if (!response.ok) return;
+      
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
       }
     } catch (error) {
-      console.error('Erreur chargement commande:', error);
+      console.error('Erreur config:', error);
     }
   }
 
-  // Fallback sur localStorage seulement si l'API échoue
-  if (!order) {
-    const lastOrder = localStorage.getItem('last_order');
-    if (lastOrder) {
-      order = JSON.parse(lastOrder);
-      console.log('📦 Fallback sur localStorage:', order);
+  // ==========================================
+  // Récupération Commande
+  // ==========================================
+  async function fetchOrder(orderId) {
+    try {
+      console.log('🔍 Récupération commande:', orderId);
+      
+      const response = await fetch(`${apiBaseUrl}/commandes/public/${orderId}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Commande introuvable');
+        }
+        throw new Error('Erreur lors de la récupération de la commande');
+      }
+      
+      const order = await response.json();
+      console.log('✅ Commande récupérée:', order);
+      
+      return order;
+      
+    } catch (error) {
+      console.error('❌ Erreur récupération commande:', error);
+      throw error;
     }
   }
 
-  if (!order) {
-    showError('Commande introuvable', 'Impossible de charger les détails de votre commande');
-    return;
+  // ==========================================
+  // Polling pour Stripe
+  // ==========================================
+  function startPollingForPayment(orderId) {
+    console.log('🔄 Démarrage polling pour confirmation paiement');
+    
+    updateLoadingMessage('En attente de confirmation du paiement...', 'Cela peut prendre quelques secondes');
+    
+    pollingInterval = setInterval(async () => {
+      pollingAttempts++;
+      console.log(`🔄 Polling tentative ${pollingAttempts}/${MAX_POLLING_ATTEMPTS}`);
+      
+      try {
+        const order = await fetchOrder(orderId);
+        
+        // Vérifier si le paiement est confirmé
+        if (order.paiement?.statut === 'paye') {
+          console.log('✅ Paiement confirmé !');
+          stopPolling();
+          
+          // Vider le panier
+          localStorage.removeItem('cart');
+          localStorage.removeItem('last_order');
+          window.dispatchEvent(new Event('cart-updated'));
+          
+          // Afficher la commande
+          displayOrder(order);
+          showContent();
+        } else if (order.paiement?.statut === 'echec') {
+          console.log('❌ Paiement échoué');
+          stopPolling();
+          window.location.href = `/payment-cancel?order=${orderId}&reason=payment_failed`;
+        } else if (pollingAttempts >= MAX_POLLING_ATTEMPTS) {
+          console.log('⏱️ Timeout polling');
+          stopPolling();
+          window.location.href = `/payment-cancel?order=${orderId}&reason=timeout`;
+        }
+      } catch (error) {
+        console.error('Erreur polling:', error);
+        if (pollingAttempts >= MAX_POLLING_ATTEMPTS) {
+          stopPolling();
+          showError('Timeout', 'La confirmation du paiement prend trop de temps. Veuillez contacter le restaurant.');
+        }
+      }
+    }, POLLING_INTERVAL);
   }
 
-  // Vérifier le statut de paiement
-  const paymentStatus = order.paiement?.statut;
-  const paymentMode = order.paiement?.mode;
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
 
-  console.log(`💳 Statut: ${paymentStatus} | Mode: ${paymentMode} | Tentative: ${retryCount + 1}`);
+  function updateLoadingMessage(title, subtitle) {
+    document.getElementById('loading-title').textContent = title;
+    document.getElementById('loading-subtitle').textContent = subtitle;
+  }
 
-  // Si paiement en ligne et en attente, attendre le webhook
-  if (paymentMode === 'en_ligne' && paymentStatus === 'en_attente_paiement') {
-    if (retryCount < MAX_RETRIES) {
-      console.log(`⏳ En attente du webhook Stripe... retry dans ${RETRY_DELAY}ms`);
-      setTimeout(() => {
-        loadOrder(retryCount + 1);
-      }, RETRY_DELAY);
+  // ==========================================
+  // Chargement Principal
+  // ==========================================
+  async function loadOrder() {
+    if (!orderId) {
+      // Essayer de récupérer depuis localStorage
+      const lastOrder = localStorage.getItem('last_order');
+      if (lastOrder) {
+        try {
+          const order = JSON.parse(lastOrder);
+          console.log('📦 Commande depuis localStorage:', order);
+          
+          // Vérifier avec le serveur
+          const serverOrder = await fetchOrder(order.id);
+          handleOrder(serverOrder);
+          return;
+        } catch (error) {
+          showError('Commande introuvable', 'Aucune commande récente trouvée');
+          return;
+        }
+      }
+      
+      showError('Erreur', 'Aucun identifiant de commande fourni');
       return;
-    } else {
-      // Après toutes les tentatives, considérer comme échec
-      console.log('⚠️ Timeout - Webhook non reçu, redirection vers payment-cancel');
-      window.location.href = `/payment-cancel?order=${order.id}&reason=payment_pending`;
-      return;
+    }
+
+    try {
+      const order = await fetchOrder(orderId);
+      handleOrder(order);
+    } catch (error) {
+      showError('Erreur', error.message || 'Impossible de charger la commande');
     }
   }
 
-  // Si paiement en ligne et payé avec succès, vider le panier
-  if (paymentMode === 'en_ligne' && paymentStatus === 'paye') {
-    console.log('✅ Paiement confirmé - vidage du panier');
-    localStorage.removeItem('cart');
-    localStorage.removeItem('last_order'); // ✅ Nettoyer aussi last_order
-    window.dispatchEvent(new Event('cart-updated'));
+  function handleOrder(order) {
+    currentOrder = order;
+    
+    // Sauvegarder dans localStorage
+    localStorage.setItem('last_order', JSON.stringify(order));
+    
+    const paymentMode = order.paiement?.mode;
+    const paymentStatus = order.paiement?.statut;
+    
+    console.log(`💳 Mode: ${paymentMode} | Statut: ${paymentStatus}`);
+    
+    // Si paiement en ligne et en attente
+    if (paymentMode === 'en_ligne' && paymentStatus === 'en_attente_paiement') {
+      startPollingForPayment(order.id);
+    }
+    // Si paiement confirmé ou autre mode
+    else if (paymentMode === 'en_ligne' && paymentStatus === 'paye') {
+      // Vider le panier
+      localStorage.removeItem('cart');
+      window.dispatchEvent(new Event('cart-updated'));
+      displayOrder(order);
+      showContent();
+    }
+    // Autres modes de paiement
+    else {
+      displayOrder(order);
+      showContent();
+    }
   }
 
-  // Afficher la commande
-  displayOrder(order);
-  
-  // Cacher le loading et afficher le contenu
-  document.getElementById('loading-initial').style.display = 'none';
-  document.getElementById('main-content').style.display = 'block';
-}
+  // ==========================================
+  // Affichage
+  // ==========================================
+  function showContent() {
+    document.getElementById('loading-initial').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   function showError(title, message) {
     document.getElementById('loading-initial').style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
     
-    const alertBox = document.querySelector('.alert-success');
-    alertBox.classList.remove('alert-success');
-    alertBox.classList.add('alert-error');
+    const alertBox = document.getElementById('alert-box');
+    alertBox.className = 'alert alert-error shadow-lg mb-6';
     alertBox.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
       <div>
-        <h3 class="font-bold">${title}</h3>
+        <h3 class="font-bold text-lg">${title}</h3>
         <div class="text-sm">${message}</div>
       </div>
     `;
   }
 
-  // Afficher la commande
   function displayOrder(order) {
     // Numéro et date
     document.getElementById('order-numero').textContent = `Commande #${order.numero}`;
@@ -408,7 +504,7 @@ async function loadOrder(retryCount = 0) {
     // Notes
     if (order.notes) {
       const notesDiv = document.createElement('div');
-      notesDiv.className = 'alert';
+      notesDiv.className = 'alert mt-4';
       notesDiv.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
@@ -422,17 +518,27 @@ async function loadOrder(retryCount = 0) {
     }
   }
 
-  // Bouton suivre la commande
+  // ==========================================
+  // Bouton Suivre
+  // ==========================================
   document.getElementById('track-order-btn')?.addEventListener('click', () => {
-    const lastOrder = localStorage.getItem('last_order');
-    if (lastOrder) {
-      const order = JSON.parse(lastOrder);
-      window.location.href = `/status?numero=${order.numero}`;
+    if (currentOrder) {
+      window.location.href = `/status?numero=${currentOrder.numero}`;
     } else {
       window.location.href = '/status';
     }
   });
 
-  // Charger au démarrage
+  // ==========================================
+  // Cleanup au déchargement
+  // ==========================================
+  window.addEventListener('beforeunload', () => {
+    stopPolling();
+  });
+
+  // ==========================================
+  // Initialisation
+  // ==========================================
+  loadConfig();
   loadOrder();
 </script>

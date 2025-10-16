@@ -1,18 +1,17 @@
 ---
 // src/pages/status.astro
 // ============================================
-// 📍 CMDOLA - Suivi de commande
+// 📍 CMDOLA - Suivi de commande (CORRIGÉ)
 // ============================================
 
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
+const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,7 +37,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
           <input 
             type="text" 
             id="order-number-input"
-            placeholder="Ex: RARE-BURGER042" 
+            placeholder="Ex: RAREBURGER001" 
             class="input input-bordered flex-1"
             required
           />
@@ -46,6 +45,25 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
             <span class="btn-text">Rechercher</span>
           </button>
         </form>
+
+        <!-- Message d'erreur -->
+        <div id="search-error" class="alert alert-error mt-4" style="display: none;">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span id="error-message">Une erreur est survenue</span>
+        </div>
+
+        <!-- Info -->
+        <div class="alert alert-info mt-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="text-sm">
+            <p class="font-semibold">💡 Astuce</p>
+            <p>Le numéro de commande vous a été envoyé par email et se trouve sur votre page de confirmation</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -136,29 +154,10 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
   }
 </style>
 
-<script define:vars={{ restaurantId, apiBaseUrl }}>
-  // Charger le thème et logo dynamiquement
-  async function loadConfig() {
-    try {
-      const response = await fetch(`https://api.rareburger.be/api/${restaurantId}/config`);
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `https://api.rareburger.be/api/images/${restaurantId}/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-    } catch (error) {
-      console.error('Erreur config:', error);
-    }
-  }
-
-  loadConfig();
-
+<script define:vars={{ apiBaseUrl }}>
+  // ==========================================
+  // Configuration
+  // ==========================================
   const urlParams = new URLSearchParams(window.location.search);
   let currentIdentifier = urlParams.get('numero') || urlParams.get('order');
   let pollingInterval = null;
@@ -210,14 +209,21 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
 
   const statusOrder = ['nouvelle', 'en_preparation', 'prete', 'en_livraison', 'livree', 'terminee'];
 
+  // ==========================================
+  // Utilitaires
+  // ==========================================
   function formatDate(isoDate) {
-    const date = new Date(isoDate);
-    return new Intl.DateTimeFormat('fr-BE', {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
+    try {
+      const date = new Date(isoDate);
+      return new Intl.DateTimeFormat('fr-BE', {
+        day: 'numeric',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(date);
+    } catch {
+      return isoDate;
+    }
   }
 
   function formatPrice(price) {
@@ -227,29 +233,78 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     }).format(price);
   }
 
+  function showError(message) {
+    const errorDiv = document.getElementById('search-error');
+    const errorMessage = document.getElementById('error-message');
+    errorMessage.textContent = message;
+    errorDiv.style.display = 'flex';
+    
+    setTimeout(() => {
+      errorDiv.style.display = 'none';
+    }, 5000);
+  }
+
+  // ==========================================
+  // Chargement Config
+  // ==========================================
+  async function loadConfig() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/config`);
+      if (!response.ok) return;
+      
+      const config = await response.json();
+      
+      if (config.theme?.daisy) {
+        document.documentElement.setAttribute('data-theme', config.theme.daisy);
+      }
+      
+      if (config.theme?.logo) {
+        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
+        const favicon = document.getElementById('favicon');
+        if (favicon) favicon.href = logoUrl;
+      }
+    } catch (error) {
+      console.error('❌ Erreur config:', error);
+      document.documentElement.setAttribute('data-theme', 'autumn');
+    }
+  }
+
+  // ==========================================
+  // Chargement Commande
+  // ==========================================
   async function loadOrder(identifier) {
     try {
-      console.log('Chargement commande:', identifier);
-      const url = `${apiBaseUrl}/${restaurantId}/commandes/${identifier}`;
-      const response = await fetch(url);
+      console.log('🔍 Chargement commande:', identifier);
+      
+      // Utiliser l'endpoint public de tracking
+      const response = await fetch(`${apiBaseUrl}/commandes/track/${encodeURIComponent(identifier)}`);
       
       if (!response.ok) {
-        throw new Error('Commande introuvable');
+        if (response.status === 404) {
+          throw new Error('Commande introuvable. Vérifiez le numéro et réessayez.');
+        }
+        throw new Error('Erreur lors du chargement de la commande');
       }
       
       const order = await response.json();
-      console.log('Commande chargée:', order);
+      console.log('✅ Commande chargée:', order);
+      
       displayOrder(order);
       return true;
+      
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Commande introuvable. Vérifiez le numéro et réessayez.');
+      console.error('❌ Erreur:', error);
+      showError(error.message);
+      
       document.getElementById('search-section').style.display = 'block';
       document.getElementById('status-section').style.display = 'none';
       return false;
     }
   }
 
+  // ==========================================
+  // Affichage
+  // ==========================================
   function displayOrder(order) {
     document.getElementById('order-numero').textContent = `Commande #${order.numero}`;
     document.getElementById('order-date').textContent = formatDate(order.date_creation);
@@ -257,12 +312,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     renderTimeline(order.statut, order.type);
     
     const detailsContainer = document.getElementById('order-details');
-    const deliveryType = order.type === 'livraison' ? 'Livraison' : order.type === 'emporter' ? 'À emporter' : 'Sur place';
+    const deliveryType = order.type === 'livraison' ? 'Livraison' : 
+                        order.type === 'emporter' ? 'À emporter' : 'Sur place';
     
     let detailsHTML = `
       <div class="flex justify-between">
         <span class="text-base-content/70">Type</span>
         <span class="font-semibold capitalize">${deliveryType}</span>
+      </div>
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Client</span>
+        <span class="font-semibold">${order.client.prenom} ${order.client.nom}</span>
       </div>
       <div class="flex justify-between">
         <span class="text-base-content/70">Articles</span>
@@ -283,6 +343,53 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
       `;
     }
 
+    if (order.type === 'livraison' && order.client?.adresse) {
+      const addr = order.client.adresse;
+      detailsHTML += `
+        <div class="divider my-2"></div>
+        <div>
+          <p class="text-sm text-base-content/60 mb-1">Adresse de livraison</p>
+          <p class="font-semibold">${addr.rue} ${addr.numero}</p>
+          <p class="text-sm">${addr.code_postal} ${addr.ville}</p>
+        </div>
+      `;
+    }
+
+    if (order.numero_table) {
+      detailsHTML += `
+        <div class="flex justify-between">
+          <span class="text-base-content/70">Table</span>
+          <span class="font-semibold">N°${order.numero_table}</span>
+        </div>
+      `;
+    }
+
+    if (order.heure_souhaitee) {
+      detailsHTML += `
+        <div class="flex justify-between">
+          <span class="text-base-content/70">Heure souhaitée</span>
+          <span class="font-semibold">${order.heure_souhaitee}</span>
+        </div>
+      `;
+    }
+
+    // Afficher les articles
+    if (order.articles && order.articles.length > 0) {
+      detailsHTML += `
+        <div class="divider my-2"></div>
+        <div>
+          <p class="text-sm text-base-content/60 mb-2">Contenu de la commande</p>
+          <div class="space-y-1">
+            ${order.articles.map(item => `
+              <div class="text-sm">
+                <span class="font-semibold">${item.quantite}x</span> ${item.nom}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     detailsContainer.innerHTML = detailsHTML;
   }
 
@@ -290,7 +397,13 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     const timeline = document.getElementById('status-timeline');
     
     let steps = [...statusOrder];
-    if (orderType !== 'livraison') {
+    
+    // Adapter les étapes selon le type de commande
+    if (orderType === 'livraison') {
+      // Remplacer 'terminee' par 'livree'
+      steps = steps.filter(s => s !== 'terminee');
+    } else {
+      // Enlever les étapes de livraison
       steps = steps.filter(s => s !== 'en_livraison' && s !== 'livree');
     }
     
@@ -330,14 +443,20 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     }).join('');
   }
 
+  // ==========================================
+  // Event Listeners
+  // ==========================================
   const searchForm = document.getElementById('search-form');
   if (searchForm) {
     searchForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const input = document.getElementById('order-number-input');
-      const orderNumber = input ? input.value.trim() : '';
+      const orderNumber = input ? input.value.trim().toUpperCase() : '';
       
-      if (!orderNumber) return;
+      if (!orderNumber) {
+        showError('Veuillez entrer un numéro de commande');
+        return;
+      }
       
       const btn = e.target.querySelector('button[type="submit"]');
       const btnText = btn.querySelector('.btn-text');
@@ -370,14 +489,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     });
   }
 
+  // ==========================================
+  // Polling Auto-Refresh
+  // ==========================================
   function startPolling() {
     stopPolling();
     pollingInterval = setInterval(() => {
       if (currentIdentifier) {
-        console.log('Mise à jour automatique...');
+        console.log('🔄 Mise à jour automatique...');
         loadOrder(currentIdentifier);
       }
-    }, 30000);
+    }, 30000); // 30 secondes
   }
 
   function stopPolling() {
@@ -387,13 +509,20 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/
     }
   }
 
+  // ==========================================
+  // Initialisation
+  // ==========================================
+  loadConfig();
+
+  // Si un identifiant est dans l'URL, charger directement
   if (currentIdentifier && currentIdentifier !== 'null' && currentIdentifier !== '') {
-    console.log('Chargement auto:', currentIdentifier);
+    console.log('🚀 Chargement auto:', currentIdentifier);
     document.getElementById('search-section').style.display = 'none';
     document.getElementById('status-section').style.display = 'block';
     loadOrder(currentIdentifier);
     startPolling();
   }
 
+  // Cleanup
   window.addEventListener('beforeunload', stopPolling);
 </script>

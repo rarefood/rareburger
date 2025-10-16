@@ -4,12 +4,13 @@
 // 📝 CMDOLA - Modal détails produit
 // ============================================
 
+import "../assets/app.css";
+
 interface Props {
   id: string;
 }
 
 const { id } = Astro.props;
-import "../assets/app.css";
 ---
 
 <dialog id={`modal-${id}`} class="modal">
@@ -351,14 +352,21 @@ import "../assets/app.css";
     );
 
     if (existingIndex >= 0) {
+      // Augmenter la quantité
       cart[existingIndex].quantite += article.quantite;
     } else {
+      // Ajouter nouveau
       cart.push(article);
     }
 
     // Sauvegarder
     localStorage.setItem('cart', JSON.stringify(cart));
+    
+    // Émettre événement pour mettre à jour le badge
     window.dispatchEvent(new Event('cart-updated'));
+    
+    // Toast de confirmation (optionnel)
+    console.log('✅ Produit ajouté au panier');
 
     // Fermer le modal
     const modal = document.getElementById(`modal-${productId}`);

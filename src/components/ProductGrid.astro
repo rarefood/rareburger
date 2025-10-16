@@ -4,7 +4,7 @@
 // 📋 CMDOLA - Grille de Produits Responsive
 // ============================================
 
-import { api } from '../lib/api';
+import api from '../lib/api'; // ✅ Import par défaut
 import ProductCard from './ProductCard.astro';
 import "../assets/app.css";
 
@@ -22,7 +22,18 @@ const {
 let products: any[] = [];
 let apiError = false;
 
+// Données de démo (fallback)
+const demoProducts = [
+  { id: 'demo-1', nom: 'Pizza Margherita', description: 'Sauce tomate, mozzarella, basilic frais', prix: 12.50, category: 'pizzas', disponible: true, popular: true },
+  { id: 'demo-2', nom: 'Burger Classic', description: 'Steak haché, salade, tomate, oignons', prix: 10.90, category: 'burgers', disponible: true, popular: false },
+  { id: 'demo-3', nom: 'Salade César', description: 'Poulet grillé, parmesan, croûtons', prix: 9.50, category: 'entrees', disponible: true, popular: true },
+  { id: 'demo-4', nom: 'Tiramisu', description: 'Mascarpone, café, cacao', prix: 6.50, category: 'desserts', disponible: true, popular: false },
+  { id: 'demo-5', nom: 'Coca Cola', description: '33cl', prix: 2.50, category: 'boissons', disponible: true, popular: false },
+  { id: 'demo-6', nom: 'Pizza 4 Fromages', description: 'Mozzarella, gorgonzola, chèvre, parmesan', prix: 14.50, category: 'pizzas', disponible: true, popular: true },
+];
+
 try {
+  // ✅ Utilise déjà api.menu.get() correctement
   const menu = await api.menu.get();
   products = menu.produits || [];
   
@@ -30,14 +41,7 @@ try {
   if (products.length === 0) {
     console.warn('⚠️  Aucun produit depuis l\'API, utilisation de données de démo');
     apiError = true;
-    products = [
-      { id: 'demo-1', nom: 'Pizza Margherita', description: 'Sauce tomate, mozzarella, basilic frais', prix: 12.50, category: 'pizzas', disponible: true, popular: true },
-      { id: 'demo-2', nom: 'Burger Classic', description: 'Steak haché, salade, tomate, oignons', prix: 10.90, category: 'burgers', disponible: true, popular: false },
-      { id: 'demo-3', nom: 'Salade César', description: 'Poulet grillé, parmesan, croûtons', prix: 9.50, category: 'entrees', disponible: true, popular: true },
-      { id: 'demo-4', nom: 'Tiramisu', description: 'Mascarpone, café, cacao', prix: 6.50, category: 'desserts', disponible: true, popular: false },
-      { id: 'demo-5', nom: 'Coca Cola', description: '33cl', prix: 2.50, category: 'boissons', disponible: true, popular: false },
-      { id: 'demo-6', nom: 'Pizza 4 Fromages', description: 'Mozzarella, gorgonzola, chèvre, parmesan', prix: 14.50, category: 'pizzas', disponible: true, popular: true },
-    ];
+    products = demoProducts;
   }
   
   // Filtrer par catégorie si nécessaire
@@ -64,14 +68,9 @@ try {
   });
   
 } catch (error) {
-  console.error('Erreur chargement produits:', error);
+  console.error('❌ Erreur chargement produits:', error);
   apiError = true;
-  // Données de démo en cas d'erreur
-  products = [
-    { id: 'demo-1', nom: 'Pizza Margherita', description: 'Sauce tomate, mozzarella, basilic frais', prix: 12.50, category: 'pizzas', disponible: true, popular: true },
-    { id: 'demo-2', nom: 'Burger Classic', description: 'Steak haché, salade, tomate, oignons', prix: 10.90, category: 'burgers', disponible: true, popular: false },
-    { id: 'demo-3', nom: 'Salade César', description: 'Poulet grillé, parmesan, croûtons', prix: 9.50, category: 'entrees', disponible: true, popular: true },
-  ];
+  products = demoProducts;
 }
 ---
 
@@ -113,12 +112,12 @@ try {
       id="product-grid"
     >
       {products.map((product) => {
-        // Construire les URLs complètes des images
+        // ✅ Utiliser api.images.getUrl() pour construire les URLs
         const images = (product.images || []).map((img: string) => {
+          // Si c'est déjà une URL complète, la garder telle quelle
           if (img.startsWith('http')) return img;
-          const apiUrl = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
-          const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-          return `${apiUrl}/images/${restaurantId}/${img}`;
+          // Sinon, utiliser le helper api.ts
+          return api.images.getUrl(img);
         });
         
         return (

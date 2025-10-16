@@ -20,7 +20,7 @@ try {
 ---
 
 <!DOCTYPE html>
-<html lang="fr" data-theme="autumn">
+<html lang="fr" >
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -122,19 +122,21 @@ try {
 </body>
 </html>
 
-<script define:vars={{ RESTAURANT_ID }}>
+<!-- Script 1 : Config et imports -->
+<script>
+  import api from '../lib/api';
+
   // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.rareburger.be/api/${RESTAURANT_ID}/config`);
-      const config = await response.json();
+      const config = await api.config.get();
       
       if (config.theme?.daisy) {
         document.documentElement.setAttribute('data-theme', config.theme.daisy);
       }
       
       if (config.theme?.logo) {
-        const logoUrl = `https://api.rareburger.be/api/images/${RESTAURANT_ID}/${config.theme.logo}`;
+        const logoUrl = api.images.getUrl(config.theme.logo);
         const favicon = document.getElementById('favicon');
         if (favicon) favicon.href = logoUrl;
       }
@@ -144,6 +146,10 @@ try {
   }
 
   loadConfig();
+</script>
+
+<!-- Script 2 : Logique métier -->
+<script>
 
   // 🛒 Gestion du panier
   let cart = [];

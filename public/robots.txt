@@ -1,0 +1,23 @@
+# Rare Burger Charleroi - Robots.txt
+User-agent: *
+Allow: /
+Allow: /menu
+
+# Bloquer les pages admin et internes
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /cuisine
+Disallow: /cuisine/*
+Disallow: /livraison
+Disallow: /livraison/*
+Disallow: /checkout
+Disallow: /confirmation
+Disallow: /status
+Disallow: /cart
+Disallow: /login
+Disallow: /logout
+Disallow: /stripe-checkout
+Disallow: /payment-cancel
+
+# Sitemap
+Sitemap: https://rareburger.be/sitemap.xml

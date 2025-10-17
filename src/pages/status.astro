@@ -7,7 +7,8 @@
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+// Pas de prerender car contenu dynamique
+export const prerender = false;
 ---
 
 <!DOCTYPE html>
@@ -154,375 +155,387 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api'
   }
 </style>
 
-<script define:vars={{ apiBaseUrl }}>
-  // ==========================================
-  // Configuration
-  // ==========================================
-  const urlParams = new URLSearchParams(window.location.search);
-  let currentIdentifier = urlParams.get('numero') || urlParams.get('order');
-  let pollingInterval = null;
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../lib/api';
 
-  const statusConfig = {
-    'nouvelle': {
-      label: 'Commande reçue',
-      icon: '📝',
-      color: 'primary',
-      description: 'Votre commande a été enregistrée'
-    },
-    'en_preparation': {
-      label: 'En préparation',
-      icon: '👨‍🍳',
-      color: 'warning',
-      description: 'Votre commande est en cours de préparation'
-    },
-    'prete': {
-      label: 'Prête',
-      icon: '✅',
-      color: 'success',
-      description: 'Votre commande est prête'
-    },
-    'en_livraison': {
-      label: 'En livraison',
-      icon: '🚗',
-      color: 'info',
-      description: 'Votre commande est en route'
-    },
-    'livree': {
-      label: 'Livrée',
-      icon: '🎉',
-      color: 'success',
-      description: 'Votre commande a été livrée'
-    },
-    'terminee': {
-      label: 'Terminée',
-      icon: '✅',
-      color: 'success',
-      description: 'Votre commande est terminée'
-    },
-    'annulee': {
-      label: 'Annulée',
-      icon: '❌',
-      color: 'error',
-      description: 'Votre commande a été annulée'
-    }
-  };
+// ==========================================
+// Variables Globales
+// ==========================================
+const urlParams = new URLSearchParams(window.location.search);
+let currentIdentifier = urlParams.get('numero') || urlParams.get('order');
+let pollingInterval = null;
 
-  const statusOrder = ['nouvelle', 'en_preparation', 'prete', 'en_livraison', 'livree', 'terminee'];
-
-  // ==========================================
-  // Utilitaires
-  // ==========================================
-  function formatDate(isoDate) {
-    try {
-      const date = new Date(isoDate);
-      return new Intl.DateTimeFormat('fr-BE', {
-        day: 'numeric',
-        month: 'long',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(date);
-    } catch {
-      return isoDate;
-    }
+const statusConfig = {
+  'nouvelle': {
+    label: 'Commande reçue',
+    icon: '📝',
+    color: 'primary',
+    description: 'Votre commande a été enregistrée'
+  },
+  'en_preparation': {
+    label: 'En préparation',
+    icon: '👨‍🍳',
+    color: 'warning',
+    description: 'Votre commande est en cours de préparation'
+  },
+  'prete': {
+    label: 'Prête',
+    icon: '✅',
+    color: 'success',
+    description: 'Votre commande est prête'
+  },
+  'en_livraison': {
+    label: 'En livraison',
+    icon: '🚗',
+    color: 'info',
+    description: 'Votre commande est en route'
+  },
+  'livree': {
+    label: 'Livrée',
+    icon: '🎉',
+    color: 'success',
+    description: 'Votre commande a été livrée'
+  },
+  'terminee': {
+    label: 'Terminée',
+    icon: '✅',
+    color: 'success',
+    description: 'Votre commande est terminée'
+  },
+  'annulee': {
+    label: 'Annulée',
+    icon: '❌',
+    color: 'error',
+    description: 'Votre commande a été annulée'
   }
+};
 
-  function formatPrice(price) {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(price);
+const statusOrder = ['nouvelle', 'en_preparation', 'prete', 'en_livraison', 'livree', 'terminee'];
+
+// ==========================================
+// Utilitaires
+// ==========================================
+function formatDate(isoDate) {
+  try {
+    const date = new Date(isoDate);
+    return new Intl.DateTimeFormat('fr-BE', {
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return isoDate;
   }
+}
 
-  function showError(message) {
-    const errorDiv = document.getElementById('search-error');
-    const errorMessage = document.getElementById('error-message');
-    errorMessage.textContent = message;
-    errorDiv.style.display = 'flex';
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(price);
+}
+
+function showError(message) {
+  const errorDiv = document.getElementById('search-error');
+  const errorMessage = document.getElementById('error-message');
+  errorMessage.textContent = message;
+  errorDiv.style.display = 'flex';
+  
+  setTimeout(() => {
+    errorDiv.style.display = 'none';
+  }, 5000);
+}
+
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    console.log('🔄 Chargement config...');
     
-    setTimeout(() => {
-      errorDiv.style.display = 'none';
-    }, 5000);
-  }
-
-  // ==========================================
-  // Chargement Config
-  // ==========================================
-  async function loadConfig() {
-    try {
-      const response = await fetch(`${apiBaseUrl}/config`);
-      if (!response.ok) return;
-      
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-    } catch (error) {
-      console.error('❌ Erreur config:', error);
-      document.documentElement.setAttribute('data-theme', 'autumn');
+    // ✅ Utilise api.ts
+    const config = await api.config.get();
+    
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
-  }
-
-  // ==========================================
-  // Chargement Commande
-  // ==========================================
-  async function loadOrder(identifier) {
-    try {
-      console.log('🔍 Chargement commande:', identifier);
-      
-      // Utiliser l'endpoint public de tracking
-      const response = await fetch(`${apiBaseUrl}/commandes/track/${encodeURIComponent(identifier)}`);
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Commande introuvable. Vérifiez le numéro et réessayez.');
-        }
-        throw new Error('Erreur lors du chargement de la commande');
-      }
-      
-      const order = await response.json();
-      console.log('✅ Commande chargée:', order);
-      
-      displayOrder(order);
-      return true;
-      
-    } catch (error) {
-      console.error('❌ Erreur:', error);
-      showError(error.message);
-      
-      document.getElementById('search-section').style.display = 'block';
-      document.getElementById('status-section').style.display = 'none';
-      return false;
+    
+    if (config.theme?.logo) {
+      // ✅ Utilise api.images.getUrl()
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = logoUrl;
     }
+    
+    console.log('✅ Config chargée');
+    
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
+    document.documentElement.setAttribute('data-theme', 'autumn');
   }
+}
 
-  // ==========================================
-  // Affichage
-  // ==========================================
-  function displayOrder(order) {
-    document.getElementById('order-numero').textContent = `Commande #${order.numero}`;
-    document.getElementById('order-date').textContent = formatDate(order.date_creation);
+// ==========================================
+// Chargement Commande
+// ==========================================
+async function loadOrder(identifier) {
+  try {
+    console.log('🔍 Chargement commande:', identifier);
     
-    renderTimeline(order.statut, order.type);
+    // ✅ Utilise api.commandes.track() (endpoint public)
+    const order = await api.commandes.track(identifier);
     
-    const detailsContainer = document.getElementById('order-details');
-    const deliveryType = order.type === 'livraison' ? 'Livraison' : 
-                        order.type === 'emporter' ? 'À emporter' : 'Sur place';
+    console.log('✅ Commande chargée:', order);
     
-    let detailsHTML = `
+    displayOrder(order);
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    
+    // Message d'erreur adapté
+    let errorMessage = error.message;
+    if (errorMessage.includes('404') || errorMessage.includes('introuvable')) {
+      errorMessage = 'Commande introuvable. Vérifiez le numéro et réessayez.';
+    } else {
+      errorMessage = 'Erreur lors du chargement de la commande';
+    }
+    
+    showError(errorMessage);
+    
+    document.getElementById('search-section').style.display = 'block';
+    document.getElementById('status-section').style.display = 'none';
+    return false;
+  }
+}
+
+// ==========================================
+// Affichage
+// ==========================================
+function displayOrder(order) {
+  document.getElementById('order-numero').textContent = `Commande #${order.numero}`;
+  document.getElementById('order-date').textContent = formatDate(order.date_creation);
+  
+  renderTimeline(order.statut, order.type);
+  
+  const detailsContainer = document.getElementById('order-details');
+  const deliveryType = order.type === 'livraison' ? 'Livraison' : 
+                      order.type === 'emporter' ? 'À emporter' : 'Sur place';
+  
+  let detailsHTML = `
+    <div class="flex justify-between">
+      <span class="text-base-content/70">Type</span>
+      <span class="font-semibold capitalize">${deliveryType}</span>
+    </div>
+    <div class="flex justify-between">
+      <span class="text-base-content/70">Client</span>
+      <span class="font-semibold">${order.client.prenom} ${order.client.nom}</span>
+    </div>
+    <div class="flex justify-between">
+      <span class="text-base-content/70">Articles</span>
+      <span class="font-semibold">${order.articles.reduce((sum, item) => sum + item.quantite, 0)}</span>
+    </div>
+    <div class="flex justify-between">
+      <span class="text-base-content/70">Total</span>
+      <span class="font-semibold">${formatPrice(order.prix_total)}</span>
+    </div>
+  `;
+
+  if (order.temps_estime) {
+    detailsHTML += `
       <div class="flex justify-between">
-        <span class="text-base-content/70">Type</span>
-        <span class="font-semibold capitalize">${deliveryType}</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-base-content/70">Client</span>
-        <span class="font-semibold">${order.client.prenom} ${order.client.nom}</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-base-content/70">Articles</span>
-        <span class="font-semibold">${order.articles.reduce((sum, item) => sum + item.quantite, 0)}</span>
-      </div>
-      <div class="flex justify-between">
-        <span class="text-base-content/70">Total</span>
-        <span class="font-semibold">${formatPrice(order.prix_total)}</span>
+        <span class="text-base-content/70">Temps estimé</span>
+        <span class="font-semibold">${order.temps_estime}</span>
       </div>
     `;
-
-    if (order.temps_estime) {
-      detailsHTML += `
-        <div class="flex justify-between">
-          <span class="text-base-content/70">Temps estimé</span>
-          <span class="font-semibold">${order.temps_estime}</span>
-        </div>
-      `;
-    }
-
-    if (order.type === 'livraison' && order.client?.adresse) {
-      const addr = order.client.adresse;
-      detailsHTML += `
-        <div class="divider my-2"></div>
-        <div>
-          <p class="text-sm text-base-content/60 mb-1">Adresse de livraison</p>
-          <p class="font-semibold">${addr.rue} ${addr.numero}</p>
-          <p class="text-sm">${addr.code_postal} ${addr.ville}</p>
-        </div>
-      `;
-    }
-
-    if (order.numero_table) {
-      detailsHTML += `
-        <div class="flex justify-between">
-          <span class="text-base-content/70">Table</span>
-          <span class="font-semibold">N°${order.numero_table}</span>
-        </div>
-      `;
-    }
-
-    if (order.heure_souhaitee) {
-      detailsHTML += `
-        <div class="flex justify-between">
-          <span class="text-base-content/70">Heure souhaitée</span>
-          <span class="font-semibold">${order.heure_souhaitee}</span>
-        </div>
-      `;
-    }
-
-    // Afficher les articles
-    if (order.articles && order.articles.length > 0) {
-      detailsHTML += `
-        <div class="divider my-2"></div>
-        <div>
-          <p class="text-sm text-base-content/60 mb-2">Contenu de la commande</p>
-          <div class="space-y-1">
-            ${order.articles.map(item => `
-              <div class="text-sm">
-                <span class="font-semibold">${item.quantite}x</span> ${item.nom}
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    detailsContainer.innerHTML = detailsHTML;
   }
 
-  function renderTimeline(currentStatus, orderType) {
-    const timeline = document.getElementById('status-timeline');
-    
-    let steps = [...statusOrder];
-    
-    // Adapter les étapes selon le type de commande
-    if (orderType === 'livraison') {
-      // Remplacer 'terminee' par 'livree'
-      steps = steps.filter(s => s !== 'terminee');
-    } else {
-      // Enlever les étapes de livraison
-      steps = steps.filter(s => s !== 'en_livraison' && s !== 'livree');
-    }
-    
-    const currentIndex = steps.indexOf(currentStatus);
-    
-    timeline.innerHTML = steps.map((status, index) => {
-      const config = statusConfig[status];
-      const isCompleted = index < currentIndex;
-      const isCurrent = index === currentIndex;
-      const isUpcoming = index > currentIndex;
-      
-      let classes = 'timeline-box';
-      if (isCompleted) classes += ' timeline-completed border-success';
-      if (isCurrent) classes += ' border-primary status-active';
-      
-      return `
-        <li class="${isCompleted ? 'status-completed' : ''}">
-          <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
-          <div class="timeline-middle">
-            <div class="status-icon text-2xl ${isCurrent ? 'status-active' : ''}">
-              ${config.icon}
+  if (order.type === 'livraison' && order.client?.adresse) {
+    const addr = order.client.adresse;
+    detailsHTML += `
+      <div class="divider my-2"></div>
+      <div>
+        <p class="text-sm text-base-content/60 mb-1">Adresse de livraison</p>
+        <p class="font-semibold">${addr.rue} ${addr.numero}</p>
+        <p class="text-sm">${addr.code_postal} ${addr.ville}</p>
+      </div>
+    `;
+  }
+
+  if (order.numero_table) {
+    detailsHTML += `
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Table</span>
+        <span class="font-semibold">N°${order.numero_table}</span>
+      </div>
+    `;
+  }
+
+  if (order.heure_souhaitee) {
+    detailsHTML += `
+      <div class="flex justify-between">
+        <span class="text-base-content/70">Heure souhaitée</span>
+        <span class="font-semibold">${order.heure_souhaitee}</span>
+      </div>
+    `;
+  }
+
+  // Afficher les articles
+  if (order.articles && order.articles.length > 0) {
+    detailsHTML += `
+      <div class="divider my-2"></div>
+      <div>
+        <p class="text-sm text-base-content/60 mb-2">Contenu de la commande</p>
+        <div class="space-y-1">
+          ${order.articles.map(item => `
+            <div class="text-sm">
+              <span class="font-semibold">${item.quantite}x</span> ${item.nom}
             </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  detailsContainer.innerHTML = detailsHTML;
+}
+
+function renderTimeline(currentStatus, orderType) {
+  const timeline = document.getElementById('status-timeline');
+  
+  let steps = [...statusOrder];
+  
+  // Adapter les étapes selon le type de commande
+  if (orderType === 'livraison') {
+    // Remplacer 'terminee' par 'livree'
+    steps = steps.filter(s => s !== 'terminee');
+  } else {
+    // Enlever les étapes de livraison
+    steps = steps.filter(s => s !== 'en_livraison' && s !== 'livree');
+  }
+  
+  const currentIndex = steps.indexOf(currentStatus);
+  
+  timeline.innerHTML = steps.map((status, index) => {
+    const config = statusConfig[status];
+    const isCompleted = index < currentIndex;
+    const isCurrent = index === currentIndex;
+    const isUpcoming = index > currentIndex;
+    
+    let classes = 'timeline-box';
+    if (isCompleted) classes += ' timeline-completed border-success';
+    if (isCurrent) classes += ' border-primary status-active';
+    
+    return `
+      <li class="${isCompleted ? 'status-completed' : ''}">
+        <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
+        <div class="timeline-middle">
+          <div class="status-icon text-2xl ${isCurrent ? 'status-active' : ''}">
+            ${config.icon}
           </div>
-          <div class="timeline-end mb-10">
-            <div class="${classes}">
-              <div class="font-bold ${isCurrent ? 'text-primary' : isCompleted ? 'text-success' : 'text-base-content/60'}">
-                ${config.label}
-              </div>
-              <p class="text-sm ${isUpcoming ? 'text-base-content/50' : ''}">
-                ${config.description}
-              </p>
+        </div>
+        <div class="timeline-end mb-10">
+          <div class="${classes}">
+            <div class="font-bold ${isCurrent ? 'text-primary' : isCompleted ? 'text-success' : 'text-base-content/60'}">
+              ${config.label}
             </div>
+            <p class="text-sm ${isUpcoming ? 'text-base-content/50' : ''}">
+              ${config.description}
+            </p>
           </div>
-          <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
-        </li>
-      `;
-    }).join('');
-  }
+        </div>
+        <hr class="${isCompleted ? 'bg-success' : 'bg-base-300'}" />
+      </li>
+    `;
+  }).join('');
+}
 
-  // ==========================================
-  // Event Listeners
-  // ==========================================
-  const searchForm = document.getElementById('search-form');
-  if (searchForm) {
-    searchForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('order-number-input');
-      const orderNumber = input ? input.value.trim().toUpperCase() : '';
-      
-      if (!orderNumber) {
-        showError('Veuillez entrer un numéro de commande');
-        return;
-      }
-      
-      const btn = e.target.querySelector('button[type="submit"]');
-      const btnText = btn.querySelector('.btn-text');
-      btnText.textContent = 'Recherche...';
-      btn.disabled = true;
-      
-      currentIdentifier = orderNumber;
-      const success = await loadOrder(orderNumber);
-      
-      if (success) {
-        document.getElementById('search-section').style.display = 'none';
-        document.getElementById('status-section').style.display = 'block';
-        startPolling();
-      }
-      
-      btnText.textContent = 'Rechercher';
-      btn.disabled = false;
-    });
-  }
+// ==========================================
+// Event Listeners
+// ==========================================
+const searchForm = document.getElementById('search-form');
+if (searchForm) {
+  searchForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('order-number-input');
+    const orderNumber = input ? input.value.trim().toUpperCase() : '';
+    
+    if (!orderNumber) {
+      showError('Veuillez entrer un numéro de commande');
+      return;
+    }
+    
+    const btn = e.target.querySelector('button[type="submit"]');
+    const btnText = btn.querySelector('.btn-text');
+    btnText.textContent = 'Recherche...';
+    btn.disabled = true;
+    
+    currentIdentifier = orderNumber;
+    const success = await loadOrder(orderNumber);
+    
+    if (success) {
+      document.getElementById('search-section').style.display = 'none';
+      document.getElementById('status-section').style.display = 'block';
+      startPolling();
+    }
+    
+    btnText.textContent = 'Rechercher';
+    btn.disabled = false;
+  });
+}
 
-  const changeOrderBtn = document.getElementById('change-order-btn');
-  if (changeOrderBtn) {
-    changeOrderBtn.addEventListener('click', () => {
-      stopPolling();
-      currentIdentifier = null;
-      document.getElementById('search-section').style.display = 'block';
-      document.getElementById('status-section').style.display = 'none';
-      const input = document.getElementById('order-number-input');
-      if (input) input.value = '';
-    });
-  }
-
-  // ==========================================
-  // Polling Auto-Refresh
-  // ==========================================
-  function startPolling() {
+const changeOrderBtn = document.getElementById('change-order-btn');
+if (changeOrderBtn) {
+  changeOrderBtn.addEventListener('click', () => {
     stopPolling();
-    pollingInterval = setInterval(() => {
-      if (currentIdentifier) {
-        console.log('🔄 Mise à jour automatique...');
-        loadOrder(currentIdentifier);
-      }
-    }, 30000); // 30 secondes
-  }
+    currentIdentifier = null;
+    document.getElementById('search-section').style.display = 'block';
+    document.getElementById('status-section').style.display = 'none';
+    const input = document.getElementById('order-number-input');
+    if (input) input.value = '';
+  });
+}
 
-  function stopPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      pollingInterval = null;
+// ==========================================
+// Polling Auto-Refresh
+// ==========================================
+function startPolling() {
+  stopPolling();
+  pollingInterval = setInterval(() => {
+    if (currentIdentifier) {
+      console.log('🔄 Mise à jour automatique...');
+      loadOrder(currentIdentifier);
     }
+  }, 30000); // 30 secondes
+}
+
+function stopPolling() {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
   }
+}
 
-  // ==========================================
-  // Initialisation
-  // ==========================================
-  loadConfig();
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('📍 Page de suivi chargée');
 
-  // Si un identifiant est dans l'URL, charger directement
-  if (currentIdentifier && currentIdentifier !== 'null' && currentIdentifier !== '') {
-    console.log('🚀 Chargement auto:', currentIdentifier);
-    document.getElementById('search-section').style.display = 'none';
-    document.getElementById('status-section').style.display = 'block';
-    loadOrder(currentIdentifier);
-    startPolling();
-  }
+loadConfig();
 
-  // Cleanup
-  window.addEventListener('beforeunload', stopPolling);
+// Si un identifiant est dans l'URL, charger directement
+if (currentIdentifier && currentIdentifier !== 'null' && currentIdentifier !== '') {
+  console.log('🚀 Chargement auto:', currentIdentifier);
+  document.getElementById('search-section').style.display = 'none';
+  document.getElementById('status-section').style.display = 'block';
+  loadOrder(currentIdentifier);
+  startPolling();
+}
+
+// Cleanup
+window.addEventListener('beforeunload', stopPolling);
 </script>

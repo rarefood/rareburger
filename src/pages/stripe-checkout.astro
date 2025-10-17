@@ -7,8 +7,10 @@
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
+// Pas de prerender car contenu dynamique
+export const prerender = false;
+
 const orderId = Astro.url.searchParams.get('order');
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
 if (!orderId) {
   return Astro.redirect('/cart');
@@ -98,227 +100,224 @@ if (!orderId) {
 </body>
 </html>
 
-<script define:vars={{ orderId, apiBaseUrl }}>
-  // ==========================================
-  // Configuration & Variables
-  // ==========================================
-  let currentOrder = null;
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../lib/api';
 
-  // ==========================================
-  // Utilitaires
-  // ==========================================
-  function formatPrice(price) {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(price);
-  }
+// ==========================================
+// Configuration & Variables
+// ==========================================
+const urlParams = new URLSearchParams(window.location.search);
+const orderId = urlParams.get('order');
 
-  // ==========================================
-  // Chargement Config
-  // ==========================================
-  async function loadConfig() {
-    try {
-      const response = await fetch(`${apiBaseUrl}/config`);
-      if (!response.ok) return;
-      
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-    } catch (error) {
-      console.error('❌ Erreur config:', error);
-      document.documentElement.setAttribute('data-theme', 'autumn');
-    }
-  }
+let currentOrder = null;
 
-  // ==========================================
-  // Chargement Commande
-  // ==========================================
-  async function loadOrder(orderId) {
-    try {
-      console.log('📦 Chargement commande:', orderId);
-      
-      // Utiliser l'endpoint public
-      const response = await fetch(`${apiBaseUrl}/commandes/public/${orderId}`);
-      
-      if (!response.ok) {
-        throw new Error('Commande introuvable');
-      }
-      
-      const order = await response.json();
-      console.log('✅ Commande chargée:', order);
-      
-      currentOrder = order;
-      displayOrderSummary(order);
-      
-      return order;
-      
-    } catch (error) {
-      console.error('❌ Erreur chargement commande:', error);
-      // On continue même si on ne peut pas charger les détails
-      return null;
-    }
-  }
+// ==========================================
+// Utilitaires
+// ==========================================
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(price);
+}
 
-  // ==========================================
-  // Affichage Résumé
-  // ==========================================
-  function displayOrderSummary(order) {
-    const summarySection = document.getElementById('summary-section');
-    const orderSummary = document.getElementById('order-summary');
-    const totalAmount = document.getElementById('total-amount');
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    console.log('🔄 Chargement config...');
     
-    if (!orderSummary || !totalAmount) return;
+    // ✅ Utilise api.ts
+    const config = await api.config.get();
     
-    // Articles
-    let summaryHTML = '';
-    for (const article of order.articles) {
-      const articleTotal = article.prix * article.quantite;
-      summaryHTML += `
-        <div class="flex justify-between text-sm">
-          <div class="flex-1">
-            <span class="font-medium">${article.quantite}x ${article.nom}</span>
-            ${article.supplements && article.supplements.length > 0 ? `
-              <div class="text-xs text-base-content/60 ml-4">
-                + ${article.supplements.map(s => s.name).join(', ')}
-              </div>
-            ` : ''}
-          </div>
-          <span class="font-semibold">${formatPrice(articleTotal)}</span>
-        </div>
-      `;
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
     
-    // Sous-total
+    if (config.theme?.logo) {
+      // ✅ Utilise api.images.getUrl()
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = logoUrl;
+    }
+    
+    console.log('✅ Config chargée');
+    
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
+    document.documentElement.setAttribute('data-theme', 'autumn');
+  }
+}
+
+// ==========================================
+// Chargement Commande
+// ==========================================
+async function loadOrder(orderId) {
+  try {
+    console.log('📦 Chargement commande:', orderId);
+    
+    // ✅ Utilise api.commandes.getPublic()
+    const order = await api.commandes.getPublic(orderId);
+    
+    console.log('✅ Commande chargée:', order);
+    
+    currentOrder = order;
+    displayOrderSummary(order);
+    
+    return order;
+    
+  } catch (error) {
+    console.error('❌ Erreur chargement commande:', error);
+    // On continue même si on ne peut pas charger les détails
+    return null;
+  }
+}
+
+// ==========================================
+// Affichage Résumé
+// ==========================================
+function displayOrderSummary(order) {
+  const summarySection = document.getElementById('summary-section');
+  const orderSummary = document.getElementById('order-summary');
+  const totalAmount = document.getElementById('total-amount');
+  
+  if (!orderSummary || !totalAmount) return;
+  
+  // Articles
+  let summaryHTML = '';
+  for (const article of order.articles) {
+    const articleTotal = article.prix * article.quantite;
     summaryHTML += `
-      <div class="divider my-2"></div>
       <div class="flex justify-between text-sm">
-        <span class="text-base-content/70">Sous-total</span>
-        <span>${formatPrice(order.sous_total)}</span>
+        <div class="flex-1">
+          <span class="font-medium">${article.quantite}x ${article.nom}</span>
+          ${article.supplements && article.supplements.length > 0 ? `
+            <div class="text-xs text-base-content/60 ml-4">
+              + ${article.supplements.map(s => s.name).join(', ')}
+            </div>
+          ` : ''}
+        </div>
+        <span class="font-semibold">${formatPrice(articleTotal)}</span>
       </div>
     `;
-    
-    // Frais de livraison
-    if (order.frais_livraison && order.frais_livraison > 0) {
-      summaryHTML += `
-        <div class="flex justify-between text-sm text-base-content/70">
-          <span>Frais de livraison</span>
-          <span>${formatPrice(order.frais_livraison)}</span>
-        </div>
-      `;
-    }
-    
-    orderSummary.innerHTML = summaryHTML;
-    totalAmount.textContent = formatPrice(order.prix_total);
-    
-    summarySection.style.display = 'block';
   }
-
-  // ==========================================
-  // Création Session Stripe
-  // ==========================================
-  async function createCheckoutSession() {
-    try {
-      console.log('🔄 Création session Stripe pour commande:', orderId);
-      
-      // Charger les détails de la commande d'abord
-      await loadOrder(orderId);
-      
-      // Petit délai pour que l'utilisateur voie le récap
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Créer la session Stripe
-      console.log('💳 Appel API Stripe...');
-      const response = await fetch(`${apiBaseUrl}/stripe/create-checkout-session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          order_id: orderId
-        })
-      });
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || 'Erreur lors de la création de la session de paiement');
-      }
-      
-      const sessionData = await response.json();
-      console.log('✅ Session Stripe créée:', sessionData);
-      
-      // Rediriger vers Stripe Checkout
-      if (sessionData.url) {
-        console.log('🔄 Redirection vers Stripe...');
-        
-        // Mettre à jour le message de chargement
-        const loadingTitle = document.querySelector('#loading-section h2');
-        if (loadingTitle) {
-          loadingTitle.textContent = 'Redirection vers le paiement...';
-        }
-        
-        // Rediriger
-        window.location.href = sessionData.url;
-      } else {
-        throw new Error('URL de paiement manquante dans la réponse');
-      }
-      
-    } catch (error) {
-      console.error('❌ Erreur:', error);
-      showError(error.message || 'Erreur lors de la création de la session de paiement');
-    }
-  }
-
-  // ==========================================
-  // Gestion Erreurs
-  // ==========================================
-  function showError(message) {
-    document.getElementById('loading-section').style.display = 'none';
-    document.getElementById('summary-section').style.display = 'none';
-    document.getElementById('error-section').style.display = 'block';
-    document.getElementById('error-message').textContent = message;
-  }
-
-  // ==========================================
-  // Event Listeners
-  // ==========================================
   
-  // Bouton réessayer
-  document.getElementById('retry-btn')?.addEventListener('click', () => {
-    document.getElementById('error-section').style.display = 'none';
-    document.getElementById('summary-section').style.display = 'none';
-    document.getElementById('loading-section').style.display = 'flex';
-    createCheckoutSession();
-  });
-
-  // ==========================================
-  // Initialisation
-  // ==========================================
-  loadConfig();
-
-  // Lancer la création de la session au chargement
-  if (orderId) {
-    console.log('🚀 Initialisation Stripe Checkout pour:', orderId);
-    createCheckoutSession();
-  } else {
-    showError('Aucune commande spécifiée');
+  // Sous-total
+  summaryHTML += `
+    <div class="divider my-2"></div>
+    <div class="flex justify-between text-sm">
+      <span class="text-base-content/70">Sous-total</span>
+      <span>${formatPrice(order.sous_total)}</span>
+    </div>
+  `;
+  
+  // Frais de livraison
+  if (order.frais_livraison && order.frais_livraison > 0) {
+    summaryHTML += `
+      <div class="flex justify-between text-sm text-base-content/70">
+        <span>Frais de livraison</span>
+        <span>${formatPrice(order.frais_livraison)}</span>
+      </div>
+    `;
   }
+  
+  orderSummary.innerHTML = summaryHTML;
+  totalAmount.textContent = formatPrice(order.prix_total);
+  
+  summarySection.style.display = 'block';
+}
 
-  // Empêcher le retour arrière accidentel
-  let isRedirecting = false;
-  window.addEventListener('beforeunload', (e) => {
-    if (!isRedirecting && document.getElementById('loading-section').style.display !== 'none') {
-      e.preventDefault();
-      e.returnValue = '';
-      return 'Êtes-vous sûr de vouloir quitter ? Votre session de paiement sera perdue.';
+// ==========================================
+// Création Session Stripe
+// ==========================================
+async function createCheckoutSession() {
+  try {
+    console.log('🔄 Création session Stripe pour commande:', orderId);
+    
+    // Charger les détails de la commande d'abord
+    await loadOrder(orderId);
+    
+    // Petit délai pour que l'utilisateur voie le récap
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Créer la session Stripe
+    console.log('💳 Appel API Stripe...');
+    
+    // ✅ Utilise api.stripe.createCheckoutSession()
+    const sessionData = await api.stripe.createCheckoutSession(orderId);
+    
+    console.log('✅ Session Stripe créée:', sessionData);
+    
+    // Rediriger vers Stripe Checkout
+    if (sessionData.url) {
+      console.log('🔄 Redirection vers Stripe...');
+      
+      // Mettre à jour le message de chargement
+      const loadingTitle = document.querySelector('#loading-section h2');
+      if (loadingTitle) {
+        loadingTitle.textContent = 'Redirection vers le paiement...';
+      }
+      
+      // Rediriger
+      window.location.href = sessionData.url;
+    } else {
+      throw new Error('URL de paiement manquante dans la réponse');
     }
-  });
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    showError(error.message || 'Erreur lors de la création de la session de paiement');
+  }
+}
+
+// ==========================================
+// Gestion Erreurs
+// ==========================================
+function showError(message) {
+  document.getElementById('loading-section').style.display = 'none';
+  document.getElementById('summary-section').style.display = 'none';
+  document.getElementById('error-section').style.display = 'block';
+  document.getElementById('error-message').textContent = message;
+}
+
+// ==========================================
+// Event Listeners
+// ==========================================
+
+// Bouton réessayer
+document.getElementById('retry-btn')?.addEventListener('click', () => {
+  document.getElementById('error-section').style.display = 'none';
+  document.getElementById('summary-section').style.display = 'none';
+  document.getElementById('loading-section').style.display = 'flex';
+  createCheckoutSession();
+});
+
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('💳 Page Stripe Checkout chargée');
+
+loadConfig();
+
+// Lancer la création de la session au chargement
+if (orderId) {
+  console.log('🚀 Initialisation Stripe Checkout pour:', orderId);
+  createCheckoutSession();
+} else {
+  showError('Aucune commande spécifiée');
+}
+
+// Empêcher le retour arrière accidentel
+let isRedirecting = false;
+window.addEventListener('beforeunload', (e) => {
+  if (!isRedirecting && document.getElementById('loading-section').style.display !== 'none') {
+    e.preventDefault();
+    e.returnValue = '';
+    return 'Êtes-vous sûr de vouloir quitter ? Votre session de paiement sera perdue.';
+  }
+});
 </script>

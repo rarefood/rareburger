@@ -3,7 +3,6 @@ import type { MiddlewareHandler } from 'astro';
 
 // Configuration
 const AUTH_COOKIE = 'admin_token';
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
 
 // Pages de login autorisées
 const LOGIN_PATHS = new Set([

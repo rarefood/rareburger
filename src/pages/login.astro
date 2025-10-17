@@ -8,14 +8,8 @@ import "../assets/app.css";
 
 export const prerender = false;
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
-
-// Si déjà connecté, rediriger selon le rôle
-const token = Astro.cookies.get('admin_token')?.value;
-if (token) {
-  // TODO: Décoder le token pour voir les rôles et rediriger
-  // Pour l'instant, on laisse passer pour permettre la déconnexion
-}
+// Pas de vérification auth ici car c'est la page de login
+// Si déjà connecté, rediriger selon le rôle (géré côté client)
 ---
 
 <!DOCTYPE html>
@@ -169,239 +163,277 @@ if (token) {
 </body>
 </html>
 
-<script define:vars={{ apiBaseUrl }}>
-  // ==========================================
-  // Variables Globales
-  // ==========================================
-  let currentUser = null;
-  let currentToken = null;
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../lib/api';
 
-  // Configuration des rôles
-  const ROLE_CONFIG = {
-    admin: {
-      icon: '🏢',
-      label: 'Administration',
-      description: 'Gestion complète du restaurant',
-      color: 'bg-primary',
-      url: '/admin'
-    },
-    chef: {
-      icon: '👨‍🍳',
-      label: 'Cuisine',
-      description: 'Préparation des commandes',
-      color: 'bg-warning',
-      url: '/cuisine'
-    },
-    livreur: {
-      icon: '🚗',
-      label: 'Livraison',
-      description: 'Gestion des livraisons',
-      color: 'bg-info',
-      url: '/livraison'
-    }
-  };
+// ==========================================
+// Variables Globales
+// ==========================================
+let currentUser = null;
+let currentToken = null;
 
-  // ==========================================
-  // Chargement Config & Thème
-  // ==========================================
-  async function loadConfig() {
-    try {
-      const response = await fetch(`${apiBaseUrl}/config`);
-      if (!response.ok) return;
-      
-      const config = await response.json();
-      
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        const logoImage = document.getElementById('logoImage');
-        if (favicon) favicon.href = logoUrl;
-        if (logoImage) logoImage.src = logoUrl;
-      }
-
-      if (config.nom) {
-        const nameEl = document.getElementById('restaurantName');
-        if (nameEl) nameEl.textContent = config.nom;
-      }
-    } catch (error) {
-      console.error('❌ Erreur config:', error);
-      document.documentElement.setAttribute('data-theme', 'autumn');
-    }
+// Configuration des rôles
+const ROLE_CONFIG = {
+  admin: {
+    icon: '🏢',
+    label: 'Administration',
+    description: 'Gestion complète du restaurant',
+    color: 'bg-primary',
+    url: '/admin'
+  },
+  chef: {
+    icon: '👨‍🍳',
+    label: 'Cuisine',
+    description: 'Préparation des commandes',
+    color: 'bg-warning',
+    url: '/cuisine'
+  },
+  livreur: {
+    icon: '🚗',
+    label: 'Livraison',
+    description: 'Gestion des livraisons',
+    color: 'bg-info',
+    url: '/livraison'
   }
+};
 
-  // ==========================================
-  // Affichage Erreur
-  // ==========================================
-  function showError(message) {
-    const errorAlert = document.getElementById('errorAlert');
-    const errorMessage = document.getElementById('errorMessage');
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    console.log('🔄 Chargement config...');
     
-    errorMessage.textContent = message;
-    errorAlert.classList.remove('hidden');
+    // ✅ Utilise api.ts
+    const config = await api.config.get();
     
-    setTimeout(() => {
-      errorAlert.classList.add('hidden');
-    }, 5000);
-  }
-
-  // ==========================================
-  // Gestion Formulaire de Connexion
-  // ==========================================
-  const loginForm = document.getElementById('loginForm');
-  const errorAlert = document.getElementById('errorAlert');
-  const submitBtn = document.getElementById('submitBtn');
-  const btnText = document.getElementById('btnText');
-  const btnLoader = document.getElementById('btnLoader');
-
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    errorAlert.classList.add('hidden');
-    submitBtn.disabled = true;
-    btnText.classList.add('hidden');
-    btnLoader.classList.remove('hidden');
-
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
-
-    try {
-      console.log('🔐 Tentative de connexion...', username);
-      
-      const response = await fetch(`${apiBaseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Identifiants incorrects');
-      }
-
-      console.log('✅ Connexion réussie:', data);
-
-      // Sauvegarder les infos
-      currentUser = data;
-      currentToken = data.token;
-
-      // Si un seul rôle, redirection directe
-      if (data.roles.length === 1) {
-        const role = data.roles[0];
-        console.log(`→ Un seul rôle (${role}), redirection directe`);
-        await selectRole(role);
-      } 
-      // Si plusieurs rôles, afficher le choix
-      else {
-        console.log(`→ Plusieurs rôles (${data.roles.join(', ')}), affichage du choix`);
-        showRoleSelection();
-      }
-
-    } catch (error) {
-      console.error('❌ Erreur login:', error);
-      showError(error.message || 'Erreur de connexion');
-      
-      submitBtn.disabled = false;
-      btnText.classList.remove('hidden');
-      btnLoader.classList.add('hidden');
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
-  });
+    
+    if (config.theme?.logo) {
+      // ✅ Utilise api.images.getUrl()
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      const logoImage = document.getElementById('logoImage');
+      if (favicon) favicon.href = logoUrl;
+      if (logoImage) logoImage.src = logoUrl;
+    }
 
-  // ==========================================
-  // Afficher Sélection de Rôle
-  // ==========================================
-  function showRoleSelection() {
-    document.getElementById('loginSection').classList.add('hidden');
-    document.getElementById('roleSelectionSection').classList.remove('hidden');
+    if (config.nom) {
+      const nameEl = document.getElementById('restaurantName');
+      if (nameEl) nameEl.textContent = config.nom;
+    }
+    
+    console.log('✅ Config chargée');
+    
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
+    // Thème par défaut en cas d'erreur
+    document.documentElement.setAttribute('data-theme', 'autumn');
+  }
+}
 
-    // Afficher le nom de l'utilisateur
-    document.getElementById('userName').textContent = currentUser.name || currentUser.username;
-
-    // Générer les cartes de rôles
-    const rolesContainer = document.getElementById('rolesContainer');
-    rolesContainer.innerHTML = '';
-
-    currentUser.roles.forEach(role => {
+// ==========================================
+// Vérifier si déjà connecté
+// ==========================================
+async function checkExistingSession() {
+  try {
+    // Vérifier si un token existe
+    const cookies = document.cookie.split(';');
+    const tokenCookie = cookies.find(c => c.trim().startsWith('admin_token='));
+    
+    if (!tokenCookie) return;
+    
+    console.log('🔍 Token existant détecté, vérification...');
+    
+    // ✅ Vérifier le token via api.ts
+    const result = await api.auth.verify();
+    
+    if (result.valid && result.roles && result.roles.length > 0) {
+      console.log('✅ Session valide, redirection...');
+      
+      // Rediriger vers la première interface accessible
+      const role = result.roles[0];
       const config = ROLE_CONFIG[role];
-      if (!config) return;
-
-      const card = document.createElement('div');
-      card.className = `card ${config.color} text-base-100 shadow-xl role-card`;
-      card.innerHTML = `
-        <div class="card-body p-8">
-          <div class="flex items-center gap-4 mb-4">
-            <div class="text-6xl">${config.icon}</div>
-            <div class="flex-1">
-              <h3 class="card-title text-3xl mb-2">${config.label}</h3>
-              <p class="text-lg opacity-90">${config.description}</p>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </div>
-        </div>
-      `;
-      
-      card.addEventListener('click', () => selectRole(role));
-      rolesContainer.appendChild(card);
-    });
-  }
-
-  // ==========================================
-  // Sélectionner un Rôle
-  // ==========================================
-  async function selectRole(role) {
-    console.log(`✅ Rôle sélectionné: ${role}`);
-
-    const config = ROLE_CONFIG[role];
-    if (!config) {
-      showError('Rôle invalide');
-      return;
+      if (config) {
+        window.location.href = config.url;
+      }
     }
-
-    try {
-      // Sauvegarder le token dans un cookie
-      // Le cookie sera utilisé par le middleware
-      document.cookie = `admin_token=${currentToken}; path=/; max-age=86400; SameSite=Strict`;
-      
-      console.log(`→ Redirection vers ${config.url}`);
-      
-      // Rediriger vers l'interface appropriée
-      window.location.href = config.url;
-
-    } catch (error) {
-      console.error('❌ Erreur sélection rôle:', error);
-      showError('Erreur lors de la redirection');
-    }
+  } catch (error) {
+    // Token invalide ou expiré, on reste sur la page de login
+    console.log('⚠️ Session invalide ou expirée');
   }
+}
 
-  // ==========================================
-  // Bouton Retour
-  // ==========================================
-  document.getElementById('backBtn')?.addEventListener('click', () => {
-    document.getElementById('roleSelectionSection').classList.add('hidden');
-    document.getElementById('loginSection').classList.remove('hidden');
+// ==========================================
+// Affichage Erreur
+// ==========================================
+function showError(message) {
+  const errorAlert = document.getElementById('errorAlert');
+  const errorMessage = document.getElementById('errorMessage');
+  
+  errorMessage.textContent = message;
+  errorAlert.classList.remove('hidden');
+  
+  setTimeout(() => {
+    errorAlert.classList.add('hidden');
+  }, 5000);
+}
+
+// ==========================================
+// Gestion Formulaire de Connexion
+// ==========================================
+const loginForm = document.getElementById('loginForm');
+const errorAlert = document.getElementById('errorAlert');
+const submitBtn = document.getElementById('submitBtn');
+const btnText = document.getElementById('btnText');
+const btnLoader = document.getElementById('btnLoader');
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  errorAlert.classList.add('hidden');
+  submitBtn.disabled = true;
+  btnText.classList.add('hidden');
+  btnLoader.classList.remove('hidden');
+
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    console.log('🔐 Tentative de connexion...', username);
     
-    // Reset formulaire
+    // ✅ Utilise api.auth.login()
+    const data = await api.auth.login(username, password);
+
+    if (!data.success) {
+      throw new Error(data.message || 'Identifiants incorrects');
+    }
+
+    console.log('✅ Connexion réussie:', data);
+
+    // Sauvegarder les infos
+    currentUser = data;
+    currentToken = data.token;
+
+    // Si un seul rôle, redirection directe
+    if (data.roles.length === 1) {
+      const role = data.roles[0];
+      console.log(`→ Un seul rôle (${role}), redirection directe`);
+      await selectRole(role);
+    } 
+    // Si plusieurs rôles, afficher le choix
+    else {
+      console.log(`→ Plusieurs rôles (${data.roles.join(', ')}), affichage du choix`);
+      showRoleSelection();
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur login:', error);
+    showError(error.message || 'Erreur de connexion');
+    
     submitBtn.disabled = false;
     btnText.classList.remove('hidden');
     btnLoader.classList.add('hidden');
-    
-    currentUser = null;
-    currentToken = null;
-  });
+  }
+});
 
-  // ==========================================
-  // Initialisation
-  // ==========================================
-  loadConfig();
+// ==========================================
+// Afficher Sélection de Rôle
+// ==========================================
+function showRoleSelection() {
+  document.getElementById('loginSection').classList.add('hidden');
+  document.getElementById('roleSelectionSection').classList.remove('hidden');
+
+  // Afficher le nom de l'utilisateur
+  document.getElementById('userName').textContent = currentUser.name || currentUser.username;
+
+  // Générer les cartes de rôles
+  const rolesContainer = document.getElementById('rolesContainer');
+  rolesContainer.innerHTML = '';
+
+  currentUser.roles.forEach(role => {
+    const config = ROLE_CONFIG[role];
+    if (!config) return;
+
+    const card = document.createElement('div');
+    card.className = `card ${config.color} text-base-100 shadow-xl role-card`;
+    card.innerHTML = `
+      <div class="card-body p-8">
+        <div class="flex items-center gap-4 mb-4">
+          <div class="text-6xl">${config.icon}</div>
+          <div class="flex-1">
+            <h3 class="card-title text-3xl mb-2">${config.label}</h3>
+            <p class="text-lg opacity-90">${config.description}</p>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    `;
+    
+    card.addEventListener('click', () => selectRole(role));
+    rolesContainer.appendChild(card);
+  });
+}
+
+// ==========================================
+// Sélectionner un Rôle
+// ==========================================
+async function selectRole(role) {
+  console.log(`✅ Rôle sélectionné: ${role}`);
+
+  const config = ROLE_CONFIG[role];
+  if (!config) {
+    showError('Rôle invalide');
+    return;
+  }
+
+  try {
+    // Sauvegarder le token dans un cookie
+    // Le cookie sera utilisé par le middleware
+    document.cookie = `admin_token=${currentToken}; path=/; max-age=86400; SameSite=Strict`;
+    
+    console.log(`→ Redirection vers ${config.url}`);
+    
+    // Rediriger vers l'interface appropriée
+    window.location.href = config.url;
+
+  } catch (error) {
+    console.error('❌ Erreur sélection rôle:', error);
+    showError('Erreur lors de la redirection');
+  }
+}
+
+// ==========================================
+// Bouton Retour
+// ==========================================
+document.getElementById('backBtn')?.addEventListener('click', () => {
+  document.getElementById('roleSelectionSection').classList.add('hidden');
+  document.getElementById('loginSection').classList.remove('hidden');
   
-  // Focus sur le champ username
-  document.getElementById('username')?.focus();
+  // Reset formulaire
+  submitBtn.disabled = false;
+  btnText.classList.remove('hidden');
+  btnLoader.classList.add('hidden');
+  
+  currentUser = null;
+  currentToken = null;
+});
+
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('🔐 Page de connexion chargée');
+
+loadConfig();
+checkExistingSession();
+
+// Focus sur le champ username
+document.getElementById('username')?.focus();
 </script>

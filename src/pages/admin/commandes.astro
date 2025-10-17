@@ -4,13 +4,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
 export const prerender = false;
 
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+// Vérification auth côté serveur
+const user = Astro.locals.user;
+if (!user || !user.roles.includes('admin')) {
+  return Astro.redirect('/login');
+}
 ---
 
 <AdminLayout title="Commandes">
   
   <div class="mb-6">
-  <div class="flex justify-between items-start">
+    <div class="flex justify-between items-start">
       <div>
         <h1 class="text-3xl font-bold">Gestion des commandes</h1>
         <p class="text-base-content/60">Consultez et gérez toutes vos commandes</p>
@@ -20,7 +24,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
           🔄 Actualisation...
         </span>
         <button id="toggleAutoRefresh" class="btn btn-sm btn-ghost gap-2">
-          <span id="autoRefreshIcon">⏸️</span>
+          <span id="autoRefreshIcon">🔄</span>
           <span id="autoRefreshText">Auto-refresh ON</span>
         </button>
       </div>
@@ -154,347 +158,427 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
 </AdminLayout>
 
-<script define:vars={{ RESTAURANT_ID }}>
-  let allCommandes = [];
-  let filteredCommandes = [];
-  let selectedIds = new Set();
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../../lib/api';
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(price);
+// ==========================================
+// Variables Globales
+// ==========================================
+let allCommandes = [];
+let filteredCommandes = [];
+let selectedIds = new Set();
+let autoRefreshInterval = null;
+let autoRefreshEnabled = true;
+
+// ==========================================
+// Utilitaires
+// ==========================================
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+}
+
+function formatDate(dateStr) {
+  const date = new Date(dateStr);
+  return new Intl.DateTimeFormat('fr-BE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
+function getStatusBadge(statut) {
+  const badges = {
+    'nouvelle': 'badge-warning',
+    'en_preparation': 'badge-info',
+    'prete': 'badge-success',
+    'en_livraison': 'badge-primary',
+    'livree': 'badge-success',
+    'terminee': 'badge-ghost',
+    'annulee': 'badge-error'
   };
+  return badges[statut] || 'badge-ghost';
+}
 
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat('fr-BE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
+function getStatusLabel(statut) {
+  const labels = {
+    'nouvelle': 'Nouvelle',
+    'en_preparation': 'En préparation',
+    'prete': 'Prête',
+    'en_livraison': 'En livraison',
+    'livree': 'Livrée',
+    'terminee': 'Terminée',
+    'annulee': 'Annulée'
   };
+  return labels[statut] || statut;
+}
 
-  const getStatusBadge = (statut) => {
-    const badges = {
-      'nouvelle': 'badge-warning',
-      'en_preparation': 'badge-info',
-      'prete': 'badge-success',
-      'en_livraison': 'badge-primary',
-      'livree': 'badge-success',
-      'terminee': 'badge-ghost',
-      'annulee': 'badge-error'
-    };
-    return badges[statut] || 'badge-ghost';
-  };
-
-  const getStatusLabel = (statut) => {
-    const labels = {
-      'nouvelle': 'Nouvelle',
-      'en_preparation': 'En préparation',
-      'prete': 'Prête',
-      'en_livraison': 'En livraison',
-      'livree': 'Livrée',
-      'terminee': 'Terminée',
-      'annulee': 'Annulée'
-    };
-    return labels[statut] || statut;
-  };
-
-  async function loadCommandes() {
-    try {
-      const response = await fetch(`https://api.cmdola.be/api/$commandes`);
-      const data = await response.json();
-      allCommandes = data.commandes || [];
-      applyFilters();
-    } catch (error) {
-      console.error('Erreur chargement commandes:', error);
-      document.getElementById('loader').innerHTML = `
-        <div class="alert alert-error">
-          <span>Erreur de chargement des commandes</span>
-        </div>
-      `;
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    const config = await api.config.get();
+    
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
-  }
-
-  function applyFilters() {
-    const statusFilter = document.getElementById('filterStatus').value;
-    const periodFilter = document.getElementById('filterPeriod').value;
-    const paymentFilter = document.getElementById('filterPayment').value;
-    const sortFilter = document.getElementById('filterSort').value;
-
-    filteredCommandes = allCommandes.filter(cmd => {
-      if (statusFilter && cmd.statut !== statusFilter) return false;
-      if (paymentFilter && cmd.paiement?.mode !== paymentFilter) return false;
-      
-      if (periodFilter !== 'all') {
-        const cmdDate = new Date(cmd.date_creation);
-        const now = new Date();
-        
-        if (periodFilter === 'today') {
-          if (cmdDate.toDateString() !== now.toDateString()) return false;
-        } else if (periodFilter === 'week') {
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          if (cmdDate < weekAgo) return false;
-        } else if (periodFilter === 'month') {
-          if (cmdDate.getMonth() !== now.getMonth() || cmdDate.getFullYear() !== now.getFullYear()) return false;
-        } else if (periodFilter === 'year') {
-          if (cmdDate.getFullYear() !== now.getFullYear()) return false;
-        }
-      }
-      
-      return true;
-    });
-
-    if (sortFilter === 'recent') {
-      filteredCommandes.sort((a, b) => new Date(b.date_creation) - new Date(a.date_creation));
-    } else {
-      filteredCommandes.sort((a, b) => new Date(a.date_creation) - new Date(b.date_creation));
+    
+    if (config.theme?.logo) {
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = logoUrl;
     }
-
-    renderTable();
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
   }
+}
 
-  function renderTable() {
-    const table = document.getElementById('commandesTable');
-    const totalCount = document.getElementById('totalCount');
-    const loader = document.getElementById('loader');
-    const tableContainer = document.getElementById('tableContainer');
-    const emptyState = document.getElementById('emptyState');
-
-    totalCount.textContent = filteredCommandes.length;
-    loader.classList.add('hidden');
-
-    if (filteredCommandes.length === 0) {
-      tableContainer.classList.add('hidden');
-      emptyState.classList.remove('hidden');
+// ==========================================
+// Chargement Commandes
+// ==========================================
+async function loadCommandes(silent = false) {
+  try {
+    console.log('🔄 Chargement commandes...');
+    
+    // ✅ Utilise api.ts (avec token auto)
+    const data = await api.commandes.list();
+    
+    allCommandes = data.commandes || [];
+    
+    console.log(`✅ ${allCommandes.length} commandes chargées`);
+    
+    applyFilters();
+    
+  } catch (error) {
+    console.error('❌ Erreur chargement commandes:', error);
+    
+    // Gestion erreur auth
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
       return;
     }
+    
+    document.getElementById('loader').innerHTML = `
+      <div class="alert alert-error">
+        <span>Erreur de chargement des commandes</span>
+      </div>
+    `;
+  }
+}
 
-    emptyState.classList.add('hidden');
-    tableContainer.classList.remove('hidden');
+// ==========================================
+// Filtrage & Affichage
+// ==========================================
+function applyFilters() {
+  const statusFilter = document.getElementById('filterStatus').value;
+  const periodFilter = document.getElementById('filterPeriod').value;
+  const paymentFilter = document.getElementById('filterPayment').value;
+  const sortFilter = document.getElementById('filterSort').value;
 
-    table.innerHTML = filteredCommandes.map(cmd => `
-      <tr>
-        <td>
-          <input type="checkbox" class="checkbox checkbox-sm cmd-checkbox" data-id="${cmd.id}" />
-        </td>
-        <td>
-          <span class="font-mono font-bold">${cmd.numero}</span>
-        </td>
-        <td>${formatDate(cmd.date_creation)}</td>
-        <td>${cmd.client?.nom || 'N/A'} ${cmd.client?.prenom || ''}</td>
-        <td>
-          <span class="badge badge-sm">${cmd.type || 'N/A'}</span>
-        </td>
-        <td class="font-bold">${formatPrice(cmd.prix_total)}</td>
-        <td>${cmd.paiement?.mode || 'N/A'}</td>
-        <td>
-          <span class="badge ${getStatusBadge(cmd.statut)} badge-sm">
-            ${getStatusLabel(cmd.statut)}
-          </span>
-        </td>
-        <td>
-          <div class="join">
-            <button class="btn btn-xs btn-ghost join-item edit-btn" data-id="${cmd.id}">
-              ✏️
-            </button>
-            <button class="btn btn-xs btn-ghost join-item delete-btn" data-id="${cmd.id}">
-              🗑️
-            </button>
-          </div>
-        </td>
-      </tr>
-    `).join('');
-
-      // Restaurer les sélections après le refresh
-    document.querySelectorAll('.cmd-checkbox').forEach(checkbox => {
-      if (selectedIds.has(checkbox.dataset.id)) {
-        checkbox.checked = true;
+  filteredCommandes = allCommandes.filter(cmd => {
+    if (statusFilter && cmd.statut !== statusFilter) return false;
+    if (paymentFilter && cmd.paiement?.mode !== paymentFilter) return false;
+    
+    if (periodFilter !== 'all') {
+      const cmdDate = new Date(cmd.date_creation);
+      const now = new Date();
+      
+      if (periodFilter === 'today') {
+        if (cmdDate.toDateString() !== now.toDateString()) return false;
+      } else if (periodFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (cmdDate < weekAgo) return false;
+      } else if (periodFilter === 'month') {
+        if (cmdDate.getMonth() !== now.getMonth() || cmdDate.getFullYear() !== now.getFullYear()) return false;
+      } else if (periodFilter === 'year') {
+        if (cmdDate.getFullYear() !== now.getFullYear()) return false;
       }
-    });
+    }
+    
+    return true;
+  });
 
-    attachCheckboxListeners();
-    attachActionButtons();
+  if (sortFilter === 'recent') {
+    filteredCommandes.sort((a, b) => new Date(b.date_creation) - new Date(a.date_creation));
+  } else {
+    filteredCommandes.sort((a, b) => new Date(a.date_creation) - new Date(b.date_creation));
   }
 
-  function attachCheckboxListeners() {
-    document.querySelectorAll('.cmd-checkbox').forEach(checkbox => {
-      checkbox.addEventListener('change', (e) => {
-        const id = e.target.dataset.id;
-        if (e.target.checked) {
-          selectedIds.add(id);
-        } else {
-          selectedIds.delete(id);
-        }
-        updateSelection();
-      });
-    });
+  renderTable();
+}
 
-    document.getElementById('selectAll').addEventListener('change', (e) => {
-      const checkboxes = document.querySelectorAll('.cmd-checkbox');
-      checkboxes.forEach(cb => {
-        cb.checked = e.target.checked;
-        if (e.target.checked) {
-          selectedIds.add(cb.dataset.id);
-        } else {
-          selectedIds.delete(cb.dataset.id);
-        }
-      });
+function renderTable() {
+  const table = document.getElementById('commandesTable');
+  const totalCount = document.getElementById('totalCount');
+  const loader = document.getElementById('loader');
+  const tableContainer = document.getElementById('tableContainer');
+  const emptyState = document.getElementById('emptyState');
+
+  totalCount.textContent = filteredCommandes.length;
+  loader.classList.add('hidden');
+
+  if (filteredCommandes.length === 0) {
+    tableContainer.classList.add('hidden');
+    emptyState.classList.remove('hidden');
+    return;
+  }
+
+  emptyState.classList.add('hidden');
+  tableContainer.classList.remove('hidden');
+
+  table.innerHTML = filteredCommandes.map(cmd => `
+    <tr>
+      <td>
+        <input type="checkbox" class="checkbox checkbox-sm cmd-checkbox" data-id="${cmd.id}" />
+      </td>
+      <td>
+        <span class="font-mono font-bold">${cmd.numero}</span>
+      </td>
+      <td>${formatDate(cmd.date_creation)}</td>
+      <td>${cmd.client?.nom || 'N/A'} ${cmd.client?.prenom || ''}</td>
+      <td>
+        <span class="badge badge-sm">${cmd.type || 'N/A'}</span>
+      </td>
+      <td class="font-bold">${formatPrice(cmd.prix_total)}</td>
+      <td>${cmd.paiement?.mode || 'N/A'}</td>
+      <td>
+        <span class="badge ${getStatusBadge(cmd.statut)} badge-sm">
+          ${getStatusLabel(cmd.statut)}
+        </span>
+      </td>
+      <td>
+        <div class="join">
+          <button class="btn btn-xs btn-ghost join-item edit-btn" data-id="${cmd.id}">
+            ✏️
+          </button>
+          <button class="btn btn-xs btn-ghost join-item delete-btn" data-id="${cmd.id}">
+            🗑️
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  // Restaurer les sélections après le refresh
+  document.querySelectorAll('.cmd-checkbox').forEach(checkbox => {
+    if (selectedIds.has(checkbox.dataset.id)) {
+      checkbox.checked = true;
+    }
+  });
+
+  attachCheckboxListeners();
+  attachActionButtons();
+}
+
+// ==========================================
+// Gestion des checkboxes
+// ==========================================
+function attachCheckboxListeners() {
+  document.querySelectorAll('.cmd-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const id = e.target.dataset.id;
+      if (e.target.checked) {
+        selectedIds.add(id);
+      } else {
+        selectedIds.delete(id);
+      }
       updateSelection();
     });
-  }
+  });
 
-  function updateSelection() {
-    const bulkActions = document.getElementById('bulkActions');
-    const selectedCount = document.getElementById('selectedCount');
+  document.getElementById('selectAll').addEventListener('change', (e) => {
+    const checkboxes = document.querySelectorAll('.cmd-checkbox');
+    checkboxes.forEach(cb => {
+      cb.checked = e.target.checked;
+      if (e.target.checked) {
+        selectedIds.add(cb.dataset.id);
+      } else {
+        selectedIds.delete(cb.dataset.id);
+      }
+    });
+    updateSelection();
+  });
+}
+
+function updateSelection() {
+  const bulkActions = document.getElementById('bulkActions');
+  const selectedCount = document.getElementById('selectedCount');
+  
+  selectedCount.textContent = selectedIds.size;
+  
+  if (selectedIds.size > 0) {
+    bulkActions.classList.remove('hidden');
+  } else {
+    bulkActions.classList.add('hidden');
+  }
+}
+
+// ==========================================
+// Actions sur les commandes
+// ==========================================
+function attachActionButtons() {
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      window.location.href = `/admin/commandes/edit?id=${id}`;
+    });
+  });
+
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (confirm('Supprimer cette commande ?')) {
+        await deleteCommande(id);
+      }
+    });
+  });
+}
+
+async function deleteCommande(id) {
+  try {
+    console.log(`🗑️ Suppression commande: ${id}`);
     
-    selectedCount.textContent = selectedIds.size;
+    // ✅ Utilise api.ts
+    await api.commandes.delete(id);
     
-    if (selectedIds.size > 0) {
-      bulkActions.classList.remove('hidden');
+    console.log('✅ Commande supprimée');
+    
+    await loadCommandes();
+    
+  } catch (error) {
+    console.error('❌ Erreur suppression:', error);
+    
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
     } else {
-      bulkActions.classList.add('hidden');
-    }
-  }
-
-  function attachActionButtons() {
-    document.querySelectorAll('.edit-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.id;
-        window.location.href = `/admin/commandes/edit?id=${id}`;
-      });
-    });
-
-    document.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.dataset.id;
-        if (confirm('Supprimer cette commande ?')) {
-          await deleteCommande(id);
-        }
-      });
-    });
-  }
-
-  async function deleteCommande(id) {
-    try {
-      await fetch(`https://api.cmdola.be/api/$commandes/${id}`, {
-        method: 'DELETE'
-      });
-      await loadCommandes();
-    } catch (error) {
-      console.error('Erreur suppression:', error);
       alert('Erreur lors de la suppression');
     }
   }
+}
 
-  document.getElementById('filterStatus').addEventListener('change', applyFilters);
-  document.getElementById('filterPeriod').addEventListener('change', applyFilters);
-  document.getElementById('filterPayment').addEventListener('change', applyFilters);
-  document.getElementById('filterSort').addEventListener('change', applyFilters);
+// ==========================================
+// Filtres & Exports
+// ==========================================
+document.getElementById('filterStatus').addEventListener('change', applyFilters);
+document.getElementById('filterPeriod').addEventListener('change', applyFilters);
+document.getElementById('filterPayment').addEventListener('change', applyFilters);
+document.getElementById('filterSort').addEventListener('change', applyFilters);
 
-  document.getElementById('resetFilters').addEventListener('click', () => {
-    document.getElementById('filterStatus').value = '';
-    document.getElementById('filterPeriod').value = 'all';
-    document.getElementById('filterPayment').value = '';
-    document.getElementById('filterSort').value = 'recent';
-    applyFilters();
-  });
+document.getElementById('resetFilters').addEventListener('click', () => {
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterPeriod').value = 'all';
+  document.getElementById('filterPayment').value = '';
+  document.getElementById('filterSort').value = 'recent';
+  applyFilters();
+});
 
-  document.getElementById('deleteSelected').addEventListener('click', async () => {
-    if (selectedIds.size === 0) return;
-    
-    if (confirm(`Supprimer ${selectedIds.size} commande(s) ?`)) {
-      for (const id of selectedIds) {
-        await deleteCommande(id);
-      }
-      selectedIds.clear();
-      updateSelection();
+document.getElementById('deleteSelected').addEventListener('click', async () => {
+  if (selectedIds.size === 0) return;
+  
+  if (confirm(`Supprimer ${selectedIds.size} commande(s) ?`)) {
+    for (const id of selectedIds) {
+      await deleteCommande(id);
     }
-  });
-
-  document.getElementById('exportCSV').addEventListener('click', () => {
-    const selected = filteredCommandes.filter(cmd => selectedIds.has(cmd.id));
-    const csv = [
-      ['Numéro', 'Date', 'Client', 'Type', 'Montant', 'Statut', 'Paiement'].join(','),
-      ...selected.map(cmd => [
-        cmd.numero,
-        cmd.date_creation,
-        `${cmd.client?.nom || ''} ${cmd.client?.prenom || ''}`,
-        cmd.type,
-        cmd.prix_total,
-        cmd.statut,
-        cmd.paiement?.mode || ''
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `commandes_${Date.now()}.csv`;
-    a.click();
-  });
-
-  document.getElementById('exportPDF').addEventListener('click', () => {
-    alert('Export PDF à implémenter avec une bibliothèque comme jsPDF');
-  });
-
-
-// === AUTO-REFRESH ===
-  let autoRefreshInterval = null;
-  let autoRefreshEnabled = true;
-
-  function startAutoRefresh() {
-    if (autoRefreshInterval) return;
-    
-    autoRefreshInterval = setInterval(async () => {
-      const indicator = document.getElementById('refreshIndicator');
-      indicator.classList.remove('hidden');
-      
-      await loadCommandes();
-      
-      setTimeout(() => {
-        indicator.classList.add('hidden');
-      }, 1000);
-    }, 10000); // 10 secondes
+    selectedIds.clear();
+    updateSelection();
   }
+});
 
-  function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-      autoRefreshInterval = null;
-    }
-  }
+document.getElementById('exportCSV').addEventListener('click', () => {
+  const selected = filteredCommandes.filter(cmd => selectedIds.has(cmd.id));
+  const csv = [
+    ['Numéro', 'Date', 'Client', 'Type', 'Montant', 'Statut', 'Paiement'].join(','),
+    ...selected.map(cmd => [
+      cmd.numero,
+      cmd.date_creation,
+      `${cmd.client?.nom || ''} ${cmd.client?.prenom || ''}`,
+      cmd.type,
+      cmd.prix_total,
+      cmd.statut,
+      cmd.paiement?.mode || ''
+    ].join(','))
+  ].join('\n');
 
-  function toggleAutoRefresh() {
-    autoRefreshEnabled = !autoRefreshEnabled;
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `commandes_${Date.now()}.csv`;
+  a.click();
+});
+
+document.getElementById('exportPDF').addEventListener('click', () => {
+  alert('Export PDF à implémenter avec une bibliothèque comme jsPDF');
+});
+
+// ==========================================
+// Auto-Refresh
+// ==========================================
+function startAutoRefresh() {
+  if (autoRefreshInterval) return;
+  
+  autoRefreshInterval = setInterval(async () => {
+    const indicator = document.getElementById('refreshIndicator');
+    indicator.classList.remove('hidden');
     
-    const icon = document.getElementById('autoRefreshIcon');
-    const text = document.getElementById('autoRefreshText');
-    const btn = document.getElementById('toggleAutoRefresh');
+    await loadCommandes(true);
     
-    if (autoRefreshEnabled) {
-      startAutoRefresh();
-      icon.textContent = '⏸️';
-      text.textContent = 'Auto-refresh ON';
-      btn.classList.remove('btn-error');
-      btn.classList.add('btn-ghost');
-    } else {
-      stopAutoRefresh();
-      icon.textContent = '▶️';
-      text.textContent = 'Auto-refresh OFF';
-      btn.classList.remove('btn-ghost');
-      btn.classList.add('btn-error');
-    }
+    setTimeout(() => {
+      indicator.classList.add('hidden');
+    }, 1000);
+  }, 10000); // 10 secondes
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
   }
+}
 
-  document.getElementById('toggleAutoRefresh').addEventListener('click', toggleAutoRefresh);
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  
+  const icon = document.getElementById('autoRefreshIcon');
+  const text = document.getElementById('autoRefreshText');
+  const btn = document.getElementById('toggleAutoRefresh');
+  
+  if (autoRefreshEnabled) {
+    startAutoRefresh();
+    icon.textContent = '🔄';
+    text.textContent = 'Auto-refresh ON';
+    btn.classList.remove('btn-error');
+    btn.classList.add('btn-ghost');
+  } else {
+    stopAutoRefresh();
+    icon.textContent = '⏸️';
+    text.textContent = 'Auto-refresh OFF';
+    btn.classList.remove('btn-ghost');
+    btn.classList.add('btn-error');
+  }
+}
 
-  // Démarrer l'auto-refresh au chargement
-  startAutoRefresh();
+document.getElementById('toggleAutoRefresh').addEventListener('click', toggleAutoRefresh);
 
-  loadCommandes();
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('📦 Gestion Commandes chargée');
+
+loadConfig();
+loadCommandes();
+startAutoRefresh();
+
+// Cleanup
+window.addEventListener('beforeunload', stopAutoRefresh);
 </script>

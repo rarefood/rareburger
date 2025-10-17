@@ -4,7 +4,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
 export const prerender = false;
 
-const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
+// Vérification auth côté serveur
+const user = Astro.locals.user;
+if (!user || !user.roles.includes('admin')) {
+  return Astro.redirect('/login');
+}
+
 const commandeId = Astro.url.searchParams.get('id');
 
 if (!commandeId) {
@@ -258,186 +263,263 @@ if (!commandeId) {
 
 </AdminLayout>
 
-<script define:vars={{ RESTAURANT_ID, commandeId }}>
-  let commande = null;
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../../../lib/api';
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(price);
-  };
+// ==========================================
+// Variables Globales
+// ==========================================
+const urlParams = new URLSearchParams(window.location.search);
+const commandeId = urlParams.get('id');
 
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    return new Intl.DateTimeFormat('fr-BE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  };
+let commande = null;
 
-  async function loadCommande() {
-    try {
-      const response = await fetch(`https://api.cmdola.be/api/$commandes/${commandeId}`);
-      
-      if (!response.ok) {
-        throw new Error('Commande introuvable');
-      }
+// ==========================================
+// Utilitaires
+// ==========================================
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+}
 
-      commande = await response.json();
-      populateForm();
+function formatDate(dateStr) {
+  const date = new Date(dateStr);
+  return new Intl.DateTimeFormat('fr-BE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
 
-      document.getElementById('loader').classList.add('hidden');
-      document.getElementById('editForm').classList.remove('hidden');
-
-    } catch (error) {
-      console.error('Erreur chargement:', error);
-      document.getElementById('loader').classList.add('hidden');
-      document.getElementById('errorState').classList.remove('hidden');
+// ==========================================
+// Chargement Config & Thème
+// ==========================================
+async function loadConfig() {
+  try {
+    const config = await api.config.get();
+    
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
     }
+    
+    if (config.theme?.logo) {
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = logoUrl;
+    }
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
+  }
+}
+
+// ==========================================
+// Chargement Commande
+// ==========================================
+async function loadCommande() {
+  try {
+    console.log('🔄 Chargement commande:', commandeId);
+    
+    // ✅ Utilise api.commandes.get() (avec token auto)
+    commande = await api.commandes.get(commandeId);
+    
+    console.log('✅ Commande chargée:', commande);
+    
+    populateForm();
+
+    document.getElementById('loader').classList.add('hidden');
+    document.getElementById('editForm').classList.remove('hidden');
+
+  } catch (error) {
+    console.error('❌ Erreur chargement:', error);
+    
+    // Gestion erreur auth
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
+      return;
+    }
+    
+    document.getElementById('loader').classList.add('hidden');
+    document.getElementById('errorState').classList.remove('hidden');
+  }
+}
+
+// ==========================================
+// Remplissage Formulaire
+// ==========================================
+function populateForm() {
+  document.getElementById('commandeNumero').textContent = `Commande ${commande.numero}`;
+  document.getElementById('numeroCommande').textContent = commande.numero;
+  document.getElementById('dateCreation').textContent = formatDate(commande.date_creation);
+  document.getElementById('typeCommande').textContent = commande.type || 'N/A';
+
+  document.getElementById('clientNom').value = commande.client?.nom || '';
+  document.getElementById('clientPrenom').value = commande.client?.prenom || '';
+  document.getElementById('clientEmail').value = commande.client?.email || '';
+  document.getElementById('clientTelephone').value = commande.client?.telephone || '';
+
+  if (commande.type === 'livraison' && commande.client?.adresse) {
+    document.getElementById('adresseSection').classList.remove('hidden');
+    document.getElementById('adresseRue').value = commande.client.adresse.rue || '';
+    document.getElementById('adresseNumero').value = commande.client.adresse.numero || '';
+    document.getElementById('adresseCodePostal').value = commande.client.adresse.code_postal || '';
+    document.getElementById('adresseVille').value = commande.client.adresse.ville || '';
   }
 
-  function populateForm() {
-    document.getElementById('commandeNumero').textContent = `Commande ${commande.numero}`;
-    document.getElementById('numeroCommande').textContent = commande.numero;
-    document.getElementById('dateCreation').textContent = formatDate(commande.date_creation);
-    document.getElementById('typeCommande').textContent = commande.type || 'N/A';
+  const articlesTable = document.getElementById('articlesTable');
+  articlesTable.innerHTML = commande.articles.map(article => `
+    <tr>
+      <td>
+        <div class="font-bold">${article.nom}</div>
+        ${article.supplements?.length ? `<div class="text-xs text-base-content/60">+ ${article.supplements.map(s => s.name).join(', ')}</div>` : ''}
+      </td>
+      <td>${article.quantite}</td>
+      <td>${formatPrice(article.prix)}</td>
+      <td class="font-bold">${formatPrice(article.prix * article.quantite)}</td>
+    </tr>
+  `).join('');
 
-    document.getElementById('clientNom').value = commande.client?.nom || '';
-    document.getElementById('clientPrenom').value = commande.client?.prenom || '';
-    document.getElementById('clientEmail').value = commande.client?.email || '';
-    document.getElementById('clientTelephone').value = commande.client?.telephone || '';
-
-    if (commande.type === 'livraison' && commande.client?.adresse) {
-      document.getElementById('adresseSection').classList.remove('hidden');
-      document.getElementById('adresseRue').value = commande.client.adresse.rue || '';
-      document.getElementById('adresseNumero').value = commande.client.adresse.numero || '';
-      document.getElementById('adresseCodePostal').value = commande.client.adresse.code_postal || '';
-      document.getElementById('adresseVille').value = commande.client.adresse.ville || '';
-    }
-
-    const articlesTable = document.getElementById('articlesTable');
-    articlesTable.innerHTML = commande.articles.map(article => `
-      <tr>
-        <td>
-          <div class="font-bold">${article.nom}</div>
-          ${article.supplements?.length ? `<div class="text-xs text-base-content/60">+ ${article.supplements.map(s => s.name).join(', ')}</div>` : ''}
-        </td>
-        <td>${article.quantite}</td>
-        <td>${formatPrice(article.prix)}</td>
-        <td class="font-bold">${formatPrice(article.prix * article.quantite)}</td>
-      </tr>
-    `).join('');
-
-    document.getElementById('sousTotal').textContent = formatPrice(commande.sous_total || 0);
-    
-    if (commande.frais_livraison && commande.frais_livraison > 0) {
-      document.getElementById('fraisLivraisonRow').classList.remove('hidden');
-      document.getElementById('fraisLivraison').textContent = formatPrice(commande.frais_livraison);
-    } else {
-      document.getElementById('fraisLivraisonRow').classList.add('hidden');
-    }
-
-    document.getElementById('prixTotal').textContent = formatPrice(commande.prix_total);
-
-    document.getElementById('statut').value = commande.statut;
-    document.getElementById('notes').value = commande.notes || '';
-    
-    document.getElementById('paiementMode').value = commande.paiement?.mode || 'reception';
-    document.getElementById('paiementStatut').value = commande.paiement?.statut || 'a_reception';
+  document.getElementById('sousTotal').textContent = formatPrice(commande.sous_total || 0);
+  
+  if (commande.frais_livraison && commande.frais_livraison > 0) {
+    document.getElementById('fraisLivraisonRow').classList.remove('hidden');
+    document.getElementById('fraisLivraison').textContent = formatPrice(commande.frais_livraison);
+  } else {
+    document.getElementById('fraisLivraisonRow').classList.add('hidden');
   }
 
-  async function saveCommande() {
-    const saveBtn = document.getElementById('saveBtn');
-    const saveBtnText = document.getElementById('saveBtnText');
-    const saveBtnLoader = document.getElementById('saveBtnLoader');
+  document.getElementById('prixTotal').textContent = formatPrice(commande.prix_total);
 
-    saveBtn.disabled = true;
-    saveBtnText.classList.add('hidden');
-    saveBtnLoader.classList.remove('hidden');
+  document.getElementById('statut').value = commande.statut;
+  document.getElementById('notes').value = commande.notes || '';
+  
+  document.getElementById('paiementMode').value = commande.paiement?.mode || 'reception';
+  document.getElementById('paiementStatut').value = commande.paiement?.statut || 'a_reception';
+}
 
-    const updatedCommande = {
-      ...commande,
-      client: {
-        ...commande.client,
-        nom: document.getElementById('clientNom').value,
-        prenom: document.getElementById('clientPrenom').value,
-        email: document.getElementById('clientEmail').value,
-        telephone: document.getElementById('clientTelephone').value,
-      },
-      statut: document.getElementById('statut').value,
-      notes: document.getElementById('notes').value,
-      paiement: {
-        mode: document.getElementById('paiementMode').value,
-        statut: document.getElementById('paiementStatut').value
-      }
+// ==========================================
+// Sauvegarde Commande
+// ==========================================
+async function saveCommande() {
+  const saveBtn = document.getElementById('saveBtn');
+  const saveBtnText = document.getElementById('saveBtnText');
+  const saveBtnLoader = document.getElementById('saveBtnLoader');
+
+  saveBtn.disabled = true;
+  saveBtnText.classList.add('hidden');
+  saveBtnLoader.classList.remove('hidden');
+
+  const updatedCommande = {
+    ...commande,
+    client: {
+      ...commande.client,
+      nom: document.getElementById('clientNom').value,
+      prenom: document.getElementById('clientPrenom').value,
+      email: document.getElementById('clientEmail').value,
+      telephone: document.getElementById('clientTelephone').value,
+    },
+    statut: document.getElementById('statut').value,
+    notes: document.getElementById('notes').value,
+    paiement: {
+      mode: document.getElementById('paiementMode').value,
+      statut: document.getElementById('paiementStatut').value
+    }
+  };
+
+  if (commande.type === 'livraison') {
+    updatedCommande.client.adresse = {
+      rue: document.getElementById('adresseRue').value,
+      numero: document.getElementById('adresseNumero').value,
+      code_postal: document.getElementById('adresseCodePostal').value,
+      ville: document.getElementById('adresseVille').value
     };
-
-    if (commande.type === 'livraison') {
-      updatedCommande.client.adresse = {
-        rue: document.getElementById('adresseRue').value,
-        numero: document.getElementById('adresseNumero').value,
-        code_postal: document.getElementById('adresseCodePostal').value,
-        ville: document.getElementById('adresseVille').value
-      };
-    }
-
-    try {
-      const response = await fetch(`https://api.cmdola.be/api/$commandes/${commandeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedCommande)
-      });
-
-      if (response.ok) {
-        alert('Commande mise à jour avec succès');
-        window.location.href = '/admin/commandes';
-      } else {
-        throw new Error('Erreur lors de la mise à jour');
-      }
-    } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la mise à jour');
-    } finally {
-      saveBtn.disabled = false;
-      saveBtnText.classList.remove('hidden');
-      saveBtnLoader.classList.add('hidden');
-    }
   }
 
-  async function deleteCommande() {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) return;
+  try {
+    console.log('💾 Sauvegarde commande...');
+    
+    // ✅ Utilise api.commandes.update()
+    await api.commandes.update(commandeId, updatedCommande);
+    
+    console.log('✅ Commande mise à jour');
+    
+    alert('Commande mise à jour avec succès');
+    window.location.href = '/admin/commandes';
+    
+  } catch (error) {
+    console.error('❌ Erreur sauvegarde:', error);
+    
+    // Gestion erreur auth
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
+    } else {
+      alert('Erreur lors de la mise à jour');
+    }
+  } finally {
+    saveBtn.disabled = false;
+    saveBtnText.classList.remove('hidden');
+    saveBtnLoader.classList.add('hidden');
+  }
+}
 
-    try {
-      await fetch(`https://api.cmdola.be/api/$commandes/${commandeId}`, {
-        method: 'DELETE'
-      });
-      alert('Commande supprimée');
-      window.location.href = '/admin/commandes';
-    } catch (error) {
-      console.error('Erreur suppression:', error);
+// ==========================================
+// Suppression Commande
+// ==========================================
+async function deleteCommande() {
+  if (!confirm('Êtes-vous sûr de vouloir supprimer cette commande ?')) return;
+
+  try {
+    console.log('🗑️ Suppression commande...');
+    
+    // ✅ Utilise api.commandes.delete()
+    await api.commandes.delete(commandeId);
+    
+    console.log('✅ Commande supprimée');
+    
+    alert('Commande supprimée');
+    window.location.href = '/admin/commandes';
+    
+  } catch (error) {
+    console.error('❌ Erreur suppression:', error);
+    
+    // Gestion erreur auth
+    if (error.message.includes('Token') || error.message.includes('401')) {
+      alert('Session expirée, veuillez vous reconnecter');
+      window.location.href = '/login';
+    } else {
       alert('Erreur lors de la suppression');
     }
   }
+}
 
-  async function printCommande() {
-    try {
-      await fetch(`https://api.cmdola.be/api/$commandes/${commandeId}/print`, {
-        method: 'POST'
-      });
-      alert('Commande envoyée à l\'imprimante');
-    } catch (error) {
-      console.error('Erreur impression:', error);
-      alert('Erreur lors de l\'impression');
-    }
-  }
+// ==========================================
+// Impression (endpoint non existant pour l'instant)
+// ==========================================
+async function printCommande() {
+  alert('Fonctionnalité d\'impression à implémenter');
+  // TODO: Créer l'endpoint /api/commandes/{id}/print dans Flask
+}
 
-  document.getElementById('saveBtn').addEventListener('click', saveCommande);
-  document.getElementById('deleteBtn').addEventListener('click', deleteCommande);
-  document.getElementById('printBtn').addEventListener('click', printCommande);
+// ==========================================
+// Event Listeners
+// ==========================================
+document.getElementById('saveBtn').addEventListener('click', saveCommande);
+document.getElementById('deleteBtn').addEventListener('click', deleteCommande);
+document.getElementById('printBtn').addEventListener('click', printCommande);
 
-  loadCommande();
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('✏️ Page d\'édition commande chargée');
+
+loadConfig();
+loadCommande();
 </script>

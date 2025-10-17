@@ -6,7 +6,7 @@
 // ============================================
 // 🎯 CONFIGURATION
 // ============================================
-const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'https://api.rareburger.be/api';
 
 // ============================================
 // Helper pour récupérer le token JWT

@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
-import netlify from "@astrojs/netlify/functions"; 
+import netlify from "@astrojs/netlify"; 
 // ou "@astrojs/netlify/edge-functions" si tu veux du Edge
 
 export default defineConfig({

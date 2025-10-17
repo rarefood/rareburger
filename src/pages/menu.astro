@@ -7,11 +7,8 @@
 import Navbar from '../components/Navbar.astro';
 import CategorySelector from '../components/CategorySelector.astro';
 import ProductGrid from '../components/ProductGrid.astro';
-import api from '../lib/api'; // ✅ Import par défaut
+import api from '../lib/api';
 import "../assets/app.css";
-
-// ❌ SUPPRIMÉ: Plus besoin de RESTAURANT_ID
-// const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
 
 // Récupérer les suppléments et la config
 let supplements = [];
@@ -19,6 +16,7 @@ let config: any = {};
 let isOpen = true;
 let nextOpening = '';
 let currentSchedule: any[] = [];
+let debugInfo = ''; // Pour debug
 
 try {
   // ✅ Utiliser api.ts pour tout
@@ -28,38 +26,67 @@ try {
   // Charger la config pour les horaires
   config = await api.config.get();
   
-  // Vérifier si le restaurant est ouvert
+  // ✅ CORRECTION : Utiliser le fuseau horaire de la Belgique
   const now = new Date();
+  
+  // Convertir en heure belge (Europe/Brussels)
+  const belgianTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Brussels' }));
+  
   const dayNames = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-  const currentDay = dayNames[now.getDay()];
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const currentDay = dayNames[belgianTime.getDay()];
+  const currentTime = `${String(belgianTime.getHours()).padStart(2, '0')}:${String(belgianTime.getMinutes()).padStart(2, '0')}`;
   
   currentSchedule = config.horaires?.[currentDay] || [];
   
-  // Vérifier si l'heure actuelle est dans une des plages
-isOpen = currentSchedule.some((plage: any) => {
-  // Gérer les horaires qui passent minuit (ex: 11:30 - 02:00)
-  if (plage.fin < plage.debut) {
-    // Fermeture après minuit
-    return currentTime >= plage.debut || currentTime <= plage.fin;
-  } else {
-    // Fermeture le même jour
-    return currentTime >= plage.debut && currentTime <= plage.fin;
+  // Debug info
+  debugInfo = `Jour: ${currentDay} | Heure: ${currentTime} | Horaires: ${JSON.stringify(currentSchedule)}`;
+  console.log('🕐 Debug horaires:', debugInfo);
+  
+  // ✅ CORRECTION : Meilleure logique de comparaison d'heures
+  function timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
   }
-});
+  
+  const currentMinutes = timeToMinutes(currentTime);
+  
+  // Vérifier si l'heure actuelle est dans une des plages
+  isOpen = currentSchedule.some((plage: any) => {
+    const debutMinutes = timeToMinutes(plage.debut);
+    const finMinutes = timeToMinutes(plage.fin);
+    
+    // Gérer les horaires qui passent minuit (ex: 16:00 - 02:00)
+    if (finMinutes < debutMinutes) {
+      // Fermeture après minuit : ouvert si >= debut OU <= fin
+      const result = currentMinutes >= debutMinutes || currentMinutes <= finMinutes;
+      console.log(`  Plage minuit: ${plage.debut}-${plage.fin} → ${result}`);
+      return result;
+    } else {
+      // Fermeture le même jour : ouvert si >= debut ET <= fin
+      const result = currentMinutes >= debutMinutes && currentMinutes <= finMinutes;
+      console.log(`  Plage normale: ${plage.debut}-${plage.fin} → ${result}`);
+      return result;
+    }
+  });
+  
+  console.log(`✅ Restaurant ${isOpen ? 'OUVERT' : 'FERMÉ'}`);
   
   // Si fermé, trouver la prochaine ouverture
   if (!isOpen && currentSchedule.length > 0) {
-    const nextSlot = currentSchedule.find((plage: any) => currentTime < plage.debut);
+    const nextSlot = currentSchedule.find((plage: any) => {
+      const debutMinutes = timeToMinutes(plage.debut);
+      return currentMinutes < debutMinutes;
+    });
+    
     if (nextSlot) {
       nextOpening = `Ouverture aujourd'hui à ${nextSlot.debut}`;
     } else {
       // Chercher le lendemain
-      const tomorrowIndex = (now.getDay() + 1) % 7;
+      const tomorrowIndex = (belgianTime.getDay() + 1) % 7;
       const tomorrowDay = dayNames[tomorrowIndex];
       const tomorrowSchedule = config.horaires?.[tomorrowDay] || [];
       if (tomorrowSchedule.length > 0) {
-        const dayNamesFr = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+        const dayNamesFr = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
         nextOpening = `Ouverture ${dayNamesFr[tomorrowIndex]} à ${tomorrowSchedule[0].debut}`;
       }
     }
@@ -68,6 +95,7 @@ isOpen = currentSchedule.some((plage: any) => {
 } catch (error) {
   console.error('❌ Erreur chargement:', error);
   supplements = [];
+  isOpen = true; // Par défaut ouvert en cas d'erreur
 }
 
 const cartItems = 0;
@@ -75,7 +103,7 @@ const cartTotal = 0;
 ---
 
 <!DOCTYPE html>
-<html lang="fr" >
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -109,6 +137,11 @@ const cartTotal = 0;
           <h3 class="font-bold">Restaurant actuellement fermé</h3>
           <div class="text-sm">{nextOpening || 'Consultez nos horaires'}</div>
         </div>
+      </div>
+      
+      <!-- Debug info (à enlever en prod) -->
+      <div class="alert alert-info shadow-lg mt-2">
+        <div class="text-xs font-mono">{debugInfo}</div>
       </div>
     </div>
   )}
@@ -145,10 +178,8 @@ const cartTotal = 0;
 </style>
 
 <script>
-  // ✅ Importer api.ts côté client
   import api from '../lib/api';
 
-  // Charger le thème et logo dynamiquement
   async function loadConfig() {
     try {
       const config = await api.config.get();
@@ -169,6 +200,7 @@ const cartTotal = 0;
 
   loadConfig();
 </script>
+
 <script define:vars={{ isOpen }}>
   // Mise à jour du badge panier
   function updateCartBadge() {
@@ -221,16 +253,4 @@ const cartTotal = 0;
       alert('Le restaurant est actuellement fermé. Les commandes seront disponibles lors de notre prochaine ouverture.');
     };
   }
-
-  // Changement de thème (Ctrl+T pour debug)
-  const themes = ['light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate', 'synthwave', 'cyberpunk'];
-  let currentThemeIndex = 0;
-
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 't') {
-      e.preventDefault();
-      currentThemeIndex = (currentThemeIndex + 1) % themes.length;
-      document.documentElement.setAttribute('data-theme', themes[currentThemeIndex]);
-    }
-  });
 </script>

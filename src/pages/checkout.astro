@@ -7,8 +7,8 @@
 import Navbar from '../components/Navbar.astro';
 import '../assets/app.css';
 
-const restaurantId = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
-const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
+// Pas de prerender car contenu dynamique
+export const prerender = false;
 ---
 
 <!DOCTYPE html>
@@ -240,525 +240,517 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_URL || 'http://127.0.0.1:5000/api'
 </body>
 </html>
 
-<script define:vars={{ restaurantId, apiBaseUrl }}>
-  // ==========================================
-  // Variables Globales
-  // ==========================================
-  let config = {};
-  let modesService = {};
-  let zonesFraisLivraison = [];
-  let methodesPaiement = {};
-  
-  let currentStep = 1;
-  let selectedMode = '';
-  let selectedZone = null;
-  let selectedPaymentMethod = '';
-  let cart = [];
+<script>
+// ==========================================
+// 🚀 Imports
+// ==========================================
+import { api } from '../lib/api';
 
-  // ==========================================
-  // Utilitaires
-  // ==========================================
-  function formatPrice(price) {
-    return new Intl.NumberFormat('fr-BE', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(price);
-  }
+// ==========================================
+// Variables Globales
+// ==========================================
+let config = {};
+let modesService = {};
+let zonesFraisLivraison = [];
+let methodesPaiement = {};
 
-  function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type} shadow-lg`;
-    toast.innerHTML = `<span>${message}</span>`;
-    document.getElementById('toast-container').appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
+let currentStep = 1;
+let selectedMode = '';
+let selectedZone = null;
+let selectedPaymentMethod = '';
+let cart = [];
 
-  // ==========================================
-  // Chargement Configuration
-  // ==========================================
-  async function loadConfig() {
-    try {
-      console.log('🔍 Chargement config depuis:', `${apiBaseUrl}/config`);
-      
-      const response = await fetch(`${apiBaseUrl}/config`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      config = await response.json();
-      console.log('✅ Config chargée:', config);
-      
-      // Extraire les données
-      modesService = config.modes_service || {};
-      zonesFraisLivraison = config.zones_livraison || [];
-      methodesPaiement = config.methodes_paiement || {};
-      
-      // Vérifier qu'il y a au moins un mode actif
-      const hasActiveMode = Object.values(modesService).some(mode => mode?.active);
-      if (!hasActiveMode) {
-        throw new Error('Aucun mode de service disponible');
-      }
-      
-      // Appliquer le thème
-      if (config.theme?.daisy) {
-        document.documentElement.setAttribute('data-theme', config.theme.daisy);
-      }
-      
-      // Appliquer le logo
-      if (config.theme?.logo) {
-        const logoUrl = `${apiBaseUrl}/images/${config.theme.logo}`;
-        const favicon = document.getElementById('favicon');
-        if (favicon) favicon.href = logoUrl;
-      }
-      
-      // Générer les options dynamiquement
-      renderServiceModes();
-      
-      // Afficher le contenu
-      document.getElementById('loading-screen').style.display = 'none';
-      document.getElementById('main-content').style.display = 'block';
-      
-    } catch (error) {
-      console.error('❌ Erreur chargement config:', error);
-      document.getElementById('loading-screen').innerHTML = `
-        <div class="flex flex-col justify-center items-center h-64">
-          <div class="alert alert-error">
-            <span>Impossible de charger la configuration. Veuillez réessayer.</span>
-          </div>
-          <button onclick="location.reload()" class="btn btn-primary mt-4">Réessayer</button>
+// ==========================================
+// Utilitaires
+// ==========================================
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(price);
+}
+
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `alert alert-${type} shadow-lg`;
+  toast.innerHTML = `<span>${message}</span>`;
+  document.getElementById('toast-container').appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ==========================================
+// Chargement Configuration
+// ==========================================
+async function loadConfig() {
+  try {
+    console.log('🔍 Chargement config...');
+    
+    // ✅ Utilise api.ts
+    config = await api.config.get();
+    
+    console.log('✅ Config chargée:', config);
+    
+    // Extraire les données
+    modesService = config.modes_service || {};
+    zonesFraisLivraison = config.zones_livraison || [];
+    methodesPaiement = config.methodes_paiement || {};
+    
+    // Vérifier qu'il y a au moins un mode actif
+    const hasActiveMode = Object.values(modesService).some(mode => mode?.active);
+    if (!hasActiveMode) {
+      throw new Error('Aucun mode de service disponible');
+    }
+    
+    // Appliquer le thème
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
+    }
+    
+    // Appliquer le logo
+    if (config.theme?.logo) {
+      // ✅ Utilise api.images.getUrl()
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      if (favicon) favicon.href = logoUrl;
+    }
+    
+    // Générer les options dynamiquement
+    renderServiceModes();
+    
+    // Afficher le contenu
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    
+  } catch (error) {
+    console.error('❌ Erreur chargement config:', error);
+    document.getElementById('loading-screen').innerHTML = `
+      <div class="flex flex-col justify-center items-center h-64">
+        <div class="alert alert-error">
+          <span>Impossible de charger la configuration. Veuillez réessayer.</span>
         </div>
-      `;
-    }
+        <button onclick="location.reload()" class="btn btn-primary mt-4">Réessayer</button>
+      </div>
+    `;
   }
+}
 
-  // ==========================================
-  // Génération Modes de Service
-  // ==========================================
-  function renderServiceModes() {
-    const container = document.getElementById('service-modes-container');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    // Sur place
-    if (modesService.sur_place?.active) {
-      const html = `
-        <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
-          <div class="card-body">
-            <div class="flex items-center gap-4">
-              <input type="radio" name="mode_service" value="sur_place" class="radio radio-primary" />
-              <div class="flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-2xl">${modesService.sur_place.icon}</span>
-                  <h3 class="font-bold">${modesService.sur_place.label}</h3>
-                </div>
-                <p class="text-sm text-base-content/70">${modesService.sur_place.description}</p>
-              </div>
-            </div>
-          </div>
-        </label>
-      `;
-      container.insertAdjacentHTML('beforeend', html);
-    }
-    
-    // À emporter
-    if (modesService.emporter?.active) {
-      const delaiHtml = modesService.emporter.delai_preparation 
-        ? `<p class="text-sm text-info mt-1">⏱️ ${modesService.emporter.delai_preparation}</p>` 
-        : '';
-      
-      const html = `
-        <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
-          <div class="card-body">
-            <div class="flex items-center gap-4">
-              <input type="radio" name="mode_service" value="emporter" class="radio radio-primary" />
-              <div class="flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-2xl">${modesService.emporter.icon}</span>
-                  <h3 class="font-bold">${modesService.emporter.label}</h3>
-                </div>
-                <p class="text-sm text-base-content/70">${modesService.emporter.description}</p>
-                ${delaiHtml}
-              </div>
-            </div>
-          </div>
-        </label>
-      `;
-      container.insertAdjacentHTML('beforeend', html);
-    }
-    
-    // Livraison
-    if (modesService.livraison?.active) {
-      const html = `
-        <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
-          <div class="card-body">
-            <div class="flex items-center gap-4">
-              <input type="radio" name="mode_service" value="livraison" class="radio radio-primary" />
-              <div class="flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="text-2xl">${modesService.livraison.icon}</span>
-                  <h3 class="font-bold">${modesService.livraison.label}</h3>
-                </div>
-                <p class="text-sm text-base-content/70">${modesService.livraison.description}</p>
-              </div>
-            </div>
-          </div>
-        </label>
-      `;
-      container.insertAdjacentHTML('beforeend', html);
-    }
-    
-    // Ajouter les event listeners
-    document.querySelectorAll('input[name="mode_service"]').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        selectedMode = e.target.value;
-        document.getElementById('btn-next-step-1').disabled = false;
-        console.log('✅ Mode sélectionné:', selectedMode);
-      });
-    });
-  }
-
-  // ==========================================
-  // Génération Méthodes Paiement
-  // ==========================================
-  function renderPaymentMethods() {
-    const container = document.getElementById('payment-methods');
-    container.innerHTML = '';
-    
-    let availableMethods = [];
-    
-    // Déterminer les méthodes disponibles selon le mode
-    if (selectedMode === 'sur_place') {
-      if (methodesPaiement.comptoir?.active) availableMethods.push('comptoir');
-      if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
-    } else if (selectedMode === 'emporter') {
-      if (methodesPaiement.reception?.active) availableMethods.push('reception');
-      if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
-    } else if (selectedMode === 'livraison') {
-      if (methodesPaiement.reception?.active) availableMethods.push('reception');
-      if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
-    }
-    
-    if (availableMethods.length === 0) {
-      container.innerHTML = '<div class="alert alert-warning">Aucune méthode de paiement disponible</div>';
-      return;
-    }
-    
-    availableMethods.forEach(method => {
-      const methodConfig = methodesPaiement[method];
-      const card = document.createElement('label');
-      card.className = 'card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors';
-      card.innerHTML = `
+// ==========================================
+// Génération Modes de Service
+// ==========================================
+function renderServiceModes() {
+  const container = document.getElementById('service-modes-container');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  // Sur place
+  if (modesService.sur_place?.active) {
+    const html = `
+      <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
         <div class="card-body">
           <div class="flex items-center gap-4">
-            <input type="radio" name="payment_method" value="${method}" class="radio radio-primary" />
+            <input type="radio" name="mode_service" value="sur_place" class="radio radio-primary" />
             <div class="flex-1">
               <div class="flex items-center gap-2">
-                <span class="text-2xl">${methodConfig.icon}</span>
-                <h3 class="font-bold">${methodConfig.label}</h3>
+                <span class="text-2xl">${modesService.sur_place.icon}</span>
+                <h3 class="font-bold">${modesService.sur_place.label}</h3>
               </div>
-              <p class="text-sm text-base-content/70">${methodConfig.description}</p>
+              <p class="text-sm text-base-content/70">${modesService.sur_place.description}</p>
             </div>
           </div>
         </div>
-      `;
-      container.appendChild(card);
-    });
-    
-    // Écouter les changements
-    document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        selectedPaymentMethod = e.target.value;
-        document.getElementById('btn-confirm-order').disabled = false;
-        console.log('✅ Paiement sélectionné:', selectedPaymentMethod);
-      });
-    });
+      </label>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
   }
-
-  // ==========================================
-  // Gestion Panier
-  // ==========================================
-  function loadCart() {
-    cart = JSON.parse(localStorage.getItem('cart') || '[]');
-    console.log('🛒 Panier chargé:', cart.length, 'articles');
-    
-    if (cart.length === 0) {
-      showToast('Votre panier est vide', 'warning');
-      setTimeout(() => window.location.href = '/cart', 1500);
-      return;
-    }
-    updateSummary();
-  }
-
-  function updateSummary() {
-    const subtotal = cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
-    const itemsCount = cart.reduce((sum, item) => sum + item.quantite, 0);
-    
-    // Afficher la liste des articles
-    const itemsList = document.getElementById('summary-items-list');
-    itemsList.innerHTML = cart.map(item => `
-      <div class="flex justify-between text-sm">
-        <span>${item.quantite}x ${item.nom}</span>
-        <span class="font-semibold">${formatPrice(item.prix * item.quantite)}</span>
-      </div>
-    `).join('');
-    
-    document.getElementById('summary-items-count').textContent = itemsCount;
-    document.getElementById('summary-subtotal').textContent = formatPrice(subtotal);
-    
-    // Frais de livraison
-    let deliveryFees = 0;
-    if (selectedMode === 'livraison' && selectedZone) {
-      deliveryFees = selectedZone.frais;
-      document.getElementById('summary-delivery-row').style.display = 'flex';
-      document.getElementById('summary-delivery-label').textContent = `Livraison (${selectedZone.nom})`;
-      document.getElementById('summary-delivery-fees').textContent = formatPrice(deliveryFees);
-    } else {
-      document.getElementById('summary-delivery-row').style.display = 'none';
-    }
-    
-    const total = subtotal + deliveryFees;
-    document.getElementById('summary-total').textContent = formatPrice(total);
-  }
-
-  // ==========================================
-  // Navigation entre Étapes
-  // ==========================================
-  function showStep(step) {
-    // Masquer toutes les étapes
-    document.querySelectorAll('.step-content').forEach(el => el.style.display = 'none');
-    
-    // Afficher l'étape demandée
-    document.getElementById(`step-${step}`).style.display = 'block';
-    
-    // Mettre à jour les indicateurs
-    for (let i = 1; i <= 3; i++) {
-      const indicator = document.getElementById(`step-indicator-${i}`);
-      if (i <= step) {
-        indicator.classList.add('step-primary');
-      } else {
-        indicator.classList.remove('step-primary');
-      }
-    }
-    
-    currentStep = step;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // ==========================================
-  // Étape 1 : Mode de Service
-  // ==========================================
-  document.getElementById('btn-next-step-1')?.addEventListener('click', () => {
-    if (!selectedMode) {
-      showToast('Veuillez sélectionner un mode de service', 'warning');
-      return;
-    }
-    
-    // Adapter le formulaire selon le mode
-    const adresseFields = document.getElementById('adresse-fields');
-    const adresseInputs = adresseFields.querySelectorAll('input');
-    const heureField = document.getElementById('heure-souhaitee-field');
-    const tableField = document.getElementById('table-field');
-    
-    // Reset
-    adresseFields.style.display = 'none';
-    heureField.style.display = 'none';
-    tableField.style.display = 'none';
-    adresseInputs.forEach(input => input.required = false);
-    
-    if (selectedMode === 'livraison') {
-      adresseFields.style.display = 'block';
-      adresseInputs.forEach(input => input.required = true);
-    } else if (selectedMode === 'emporter') {
-      heureField.style.display = 'block';
-    } else if (selectedMode === 'sur_place') {
-      tableField.style.display = 'block';
-    }
-    
-    showStep(2);
-  });
-
-  // ==========================================
-  // Code Postal - Détection Zone
-  // ==========================================
-  document.getElementById('code-postal-input')?.addEventListener('input', (e) => {
-    const codePostal = e.target.value;
-    const zoneInfo = document.getElementById('zone-info');
-    
-    if (selectedMode !== 'livraison') return;
-    
-    const zone = zonesFraisLivraison.find(z => z.codes_postaux.includes(codePostal));
-    
-    if (zone) {
-      selectedZone = zone;
-      zoneInfo.textContent = `✓ ${zone.nom} - Frais: ${formatPrice(zone.frais)} - ${zone.temps_estime}`;
-      zoneInfo.classList.remove('text-error');
-      zoneInfo.classList.add('text-success');
-      updateSummary();
-    } else if (codePostal.length >= 4) {
-      selectedZone = null;
-      zoneInfo.textContent = '✗ Code postal hors zone de livraison';
-      zoneInfo.classList.remove('text-success');
-      zoneInfo.classList.add('text-error');
-      updateSummary();
-    } else {
-      zoneInfo.textContent = '';
-    }
-  });
-
-  // ==========================================
-  // Étape 2 : Informations Client
-  // ==========================================
-  document.getElementById('btn-back-step-2')?.addEventListener('click', () => showStep(1));
   
-  document.getElementById('btn-next-step-2')?.addEventListener('click', () => {
-    const form = document.getElementById('form-client');
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
+  // À emporter
+  if (modesService.emporter?.active) {
+    const delaiHtml = modesService.emporter.delai_preparation 
+      ? `<p class="text-sm text-info mt-1">⏱️ ${modesService.emporter.delai_preparation}</p>` 
+      : '';
     
-    if (selectedMode === 'livraison' && !selectedZone) {
-      showToast('Veuillez entrer un code postal valide dans notre zone de livraison', 'error');
-      return;
-    }
-    
-    // Afficher les méthodes de paiement disponibles
-    renderPaymentMethods();
-    showStep(3);
+    const html = `
+      <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
+        <div class="card-body">
+          <div class="flex items-center gap-4">
+            <input type="radio" name="mode_service" value="emporter" class="radio radio-primary" />
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-2xl">${modesService.emporter.icon}</span>
+                <h3 class="font-bold">${modesService.emporter.label}</h3>
+              </div>
+              <p class="text-sm text-base-content/70">${modesService.emporter.description}</p>
+              ${delaiHtml}
+            </div>
+          </div>
+        </div>
+      </label>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  
+  // Livraison
+  if (modesService.livraison?.active) {
+    const html = `
+      <label class="card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors">
+        <div class="card-body">
+          <div class="flex items-center gap-4">
+            <input type="radio" name="mode_service" value="livraison" class="radio radio-primary" />
+            <div class="flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-2xl">${modesService.livraison.icon}</span>
+                <h3 class="font-bold">${modesService.livraison.label}</h3>
+              </div>
+              <p class="text-sm text-base-content/70">${modesService.livraison.description}</p>
+            </div>
+          </div>
+        </div>
+      </label>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+  }
+  
+  // Ajouter les event listeners
+  document.querySelectorAll('input[name="mode_service"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      selectedMode = e.target.value;
+      document.getElementById('btn-next-step-1').disabled = false;
+      console.log('✅ Mode sélectionné:', selectedMode);
+    });
   });
+}
 
-  // ==========================================
-  // Étape 3 : Paiement
-  // ==========================================
-  document.getElementById('btn-back-step-3')?.addEventListener('click', () => showStep(2));
+// ==========================================
+// Génération Méthodes Paiement
+// ==========================================
+function renderPaymentMethods() {
+  const container = document.getElementById('payment-methods');
+  container.innerHTML = '';
+  
+  let availableMethods = [];
+  
+  // Déterminer les méthodes disponibles selon le mode
+  if (selectedMode === 'sur_place') {
+    if (methodesPaiement.comptoir?.active) availableMethods.push('comptoir');
+    if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
+  } else if (selectedMode === 'emporter') {
+    if (methodesPaiement.reception?.active) availableMethods.push('reception');
+    if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
+  } else if (selectedMode === 'livraison') {
+    if (methodesPaiement.reception?.active) availableMethods.push('reception');
+    if (methodesPaiement.en_ligne?.active) availableMethods.push('en_ligne');
+  }
+  
+  if (availableMethods.length === 0) {
+    container.innerHTML = '<div class="alert alert-warning">Aucune méthode de paiement disponible</div>';
+    return;
+  }
+  
+  availableMethods.forEach(method => {
+    const methodConfig = methodesPaiement[method];
+    const card = document.createElement('label');
+    card.className = 'card card-compact bg-base-100 border-2 border-base-300 cursor-pointer hover:border-primary transition-colors';
+    card.innerHTML = `
+      <div class="card-body">
+        <div class="flex items-center gap-4">
+          <input type="radio" name="payment_method" value="${method}" class="radio radio-primary" />
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-2xl">${methodConfig.icon}</span>
+              <h3 class="font-bold">${methodConfig.label}</h3>
+            </div>
+            <p class="text-sm text-base-content/70">${methodConfig.description}</p>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+  
+  // Écouter les changements
+  document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      selectedPaymentMethod = e.target.value;
+      document.getElementById('btn-confirm-order').disabled = false;
+      console.log('✅ Paiement sélectionné:', selectedPaymentMethod);
+    });
+  });
+}
 
-  document.getElementById('btn-confirm-order')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btn-confirm-order');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Envoi en cours...';
+// ==========================================
+// Gestion Panier
+// ==========================================
+function loadCart() {
+  cart = JSON.parse(localStorage.getItem('cart') || '[]');
+  console.log('🛒 Panier chargé:', cart.length, 'articles');
+  
+  if (cart.length === 0) {
+    showToast('Votre panier est vide', 'warning');
+    setTimeout(() => window.location.href = '/cart', 1500);
+    return;
+  }
+  updateSummary();
+}
+
+function updateSummary() {
+  const subtotal = cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+  const itemsCount = cart.reduce((sum, item) => sum + item.quantite, 0);
+  
+  // Afficher la liste des articles
+  const itemsList = document.getElementById('summary-items-list');
+  itemsList.innerHTML = cart.map(item => `
+    <div class="flex justify-between text-sm">
+      <span>${item.quantite}x ${item.nom}</span>
+      <span class="font-semibold">${formatPrice(item.prix * item.quantite)}</span>
+    </div>
+  `).join('');
+  
+  document.getElementById('summary-items-count').textContent = itemsCount;
+  document.getElementById('summary-subtotal').textContent = formatPrice(subtotal);
+  
+  // Frais de livraison
+  let deliveryFees = 0;
+  if (selectedMode === 'livraison' && selectedZone) {
+    deliveryFees = selectedZone.frais;
+    document.getElementById('summary-delivery-row').style.display = 'flex';
+    document.getElementById('summary-delivery-label').textContent = `Livraison (${selectedZone.nom})`;
+    document.getElementById('summary-delivery-fees').textContent = formatPrice(deliveryFees);
+  } else {
+    document.getElementById('summary-delivery-row').style.display = 'none';
+  }
+  
+  const total = subtotal + deliveryFees;
+  document.getElementById('summary-total').textContent = formatPrice(total);
+}
+
+// ==========================================
+// Navigation entre Étapes
+// ==========================================
+function showStep(step) {
+  // Masquer toutes les étapes
+  document.querySelectorAll('.step-content').forEach(el => el.style.display = 'none');
+  
+  // Afficher l'étape demandée
+  document.getElementById(`step-${step}`).style.display = 'block';
+  
+  // Mettre à jour les indicateurs
+  for (let i = 1; i <= 3; i++) {
+    const indicator = document.getElementById(`step-indicator-${i}`);
+    if (i <= step) {
+      indicator.classList.add('step-primary');
+    } else {
+      indicator.classList.remove('step-primary');
+    }
+  }
+  
+  currentStep = step;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ==========================================
+// Étape 1 : Mode de Service
+// ==========================================
+document.getElementById('btn-next-step-1')?.addEventListener('click', () => {
+  if (!selectedMode) {
+    showToast('Veuillez sélectionner un mode de service', 'warning');
+    return;
+  }
+  
+  // Adapter le formulaire selon le mode
+  const adresseFields = document.getElementById('adresse-fields');
+  const adresseInputs = adresseFields.querySelectorAll('input');
+  const heureField = document.getElementById('heure-souhaitee-field');
+  const tableField = document.getElementById('table-field');
+  
+  // Reset
+  adresseFields.style.display = 'none';
+  heureField.style.display = 'none';
+  tableField.style.display = 'none';
+  adresseInputs.forEach(input => input.required = false);
+  
+  if (selectedMode === 'livraison') {
+    adresseFields.style.display = 'block';
+    adresseInputs.forEach(input => input.required = true);
+  } else if (selectedMode === 'emporter') {
+    heureField.style.display = 'block';
+  } else if (selectedMode === 'sur_place') {
+    tableField.style.display = 'block';
+  }
+  
+  showStep(2);
+});
+
+// ==========================================
+// Code Postal - Détection Zone
+// ==========================================
+document.getElementById('code-postal-input')?.addEventListener('input', (e) => {
+  const codePostal = e.target.value;
+  const zoneInfo = document.getElementById('zone-info');
+  
+  if (selectedMode !== 'livraison') return;
+  
+  const zone = zonesFraisLivraison.find(z => z.codes_postaux.includes(codePostal));
+  
+  if (zone) {
+    selectedZone = zone;
+    zoneInfo.textContent = `✓ ${zone.nom} - Frais: ${formatPrice(zone.frais)} - ${zone.temps_estime}`;
+    zoneInfo.classList.remove('text-error');
+    zoneInfo.classList.add('text-success');
+    updateSummary();
+  } else if (codePostal.length >= 4) {
+    selectedZone = null;
+    zoneInfo.textContent = '✗ Code postal hors zone de livraison';
+    zoneInfo.classList.remove('text-success');
+    zoneInfo.classList.add('text-error');
+    updateSummary();
+  } else {
+    zoneInfo.textContent = '';
+  }
+});
+
+// ==========================================
+// Étape 2 : Informations Client
+// ==========================================
+document.getElementById('btn-back-step-2')?.addEventListener('click', () => showStep(1));
+
+document.getElementById('btn-next-step-2')?.addEventListener('click', () => {
+  const form = document.getElementById('form-client');
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+  
+  if (selectedMode === 'livraison' && !selectedZone) {
+    showToast('Veuillez entrer un code postal valide dans notre zone de livraison', 'error');
+    return;
+  }
+  
+  // Afficher les méthodes de paiement disponibles
+  renderPaymentMethods();
+  showStep(3);
+});
+
+// ==========================================
+// Étape 3 : Paiement
+// ==========================================
+document.getElementById('btn-back-step-3')?.addEventListener('click', () => showStep(2));
+
+document.getElementById('btn-confirm-order')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-confirm-order');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Envoi en cours...';
+  
+  try {
+    // Récupérer les valeurs depuis les radio buttons
+    const modeRadio = document.querySelector('input[name="mode_service"]:checked');
+    const paymentRadio = document.querySelector('input[name="payment_method"]:checked');
     
-    try {
-      // Récupérer les valeurs depuis les radio buttons
-      const modeRadio = document.querySelector('input[name="mode_service"]:checked');
-      const paymentRadio = document.querySelector('input[name="payment_method"]:checked');
-      
-      if (!modeRadio || !paymentRadio) {
-        throw new Error('Informations manquantes');
-      }
-      
-      const finalMode = modeRadio.value;
-      const finalPaymentMethod = paymentRadio.value;
-      
-      // Récupérer les données du formulaire
-      const formData = new FormData(document.getElementById('form-client'));
-      const clientData = Object.fromEntries(formData);
-      
-      // Détecter le type d'appareil
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      // Préparer la commande
-      const orderData = {
-        type: finalMode,
-        client: {
-          nom: clientData.nom,
-          prenom: clientData.prenom,
-          email: clientData.email,
-          telephone: clientData.telephone,
-        },
-        articles: cart,
-        sous_total: cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0),
-        notes: clientData.notes || '',
-        device_type: isMobile ? 'mobile' : 'desktop',
-        source: 'web',
+    if (!modeRadio || !paymentRadio) {
+      throw new Error('Informations manquantes');
+    }
+    
+    const finalMode = modeRadio.value;
+    const finalPaymentMethod = paymentRadio.value;
+    
+    // Récupérer les données du formulaire
+    const formData = new FormData(document.getElementById('form-client'));
+    const clientData = Object.fromEntries(formData);
+    
+    // Détecter le type d'appareil
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Préparer la commande
+    const orderData = {
+      type: finalMode,
+      client: {
+        nom: clientData.nom,
+        prenom: clientData.prenom,
+        email: clientData.email,
+        telephone: clientData.telephone,
+      },
+      articles: cart,
+      sous_total: cart.reduce((sum, item) => sum + (item.prix * item.quantite), 0),
+      notes: clientData.notes || '',
+      device_type: isMobile ? 'mobile' : 'desktop',
+      source: 'web',
+    };
+    
+    // Ajouter infos selon le mode
+    if (finalMode === 'livraison') {
+      orderData.client.adresse = {
+        rue: clientData.rue,
+        numero: clientData.numero,
+        code_postal: clientData.code_postal,
+        ville: clientData.ville,
       };
-      
-      // Ajouter infos selon le mode
-      if (finalMode === 'livraison') {
-        orderData.client.adresse = {
-          rue: clientData.rue,
-          numero: clientData.numero,
-          code_postal: clientData.code_postal,
-          ville: clientData.ville,
-        };
-        orderData.frais_livraison = selectedZone.frais;
-        orderData.zone_livraison = selectedZone.id;
-        orderData.temps_estime = selectedZone.temps_estime;
-      } else if (finalMode === 'emporter') {
-        orderData.frais_livraison = 0;
-        orderData.heure_souhaitee = clientData.heure_souhaitee || null;
-      } else if (finalMode === 'sur_place') {
-        orderData.frais_livraison = 0;
-        orderData.numero_table = clientData.numero_table || null;
-      }
-      
-      orderData.prix_total = orderData.sous_total + (orderData.frais_livraison || 0);
-      
-      // Statut selon le mode de paiement
-      if (finalPaymentMethod === 'en_ligne') {
-        orderData.paiement = {
-          mode: 'en_ligne',
-          statut: 'en_attente_paiement',
-        };
-      } else {
-        orderData.paiement = {
-          mode: finalPaymentMethod,
-          statut: 'a_reception',
-        };
-      }
-      
-      console.log('📤 Envoi commande:', orderData);
-      
-      // Envoyer à l'API (URL corrigée)
-      const response = await fetch(`${apiBaseUrl}/commandes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(orderData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || 'Erreur lors de l\'envoi de la commande');
-      }
-      
-      const result = await response.json();
-      console.log('✅ Commande créée:', result);
-      
-      // Sauvegarder la commande pour la page de confirmation
-      localStorage.setItem('last_order', JSON.stringify(result));
-      
-      // Gestion selon le mode de paiement
-      if (finalPaymentMethod === 'en_ligne') {
-        // Ne pas vider le panier pour paiement Stripe
-        console.log('💳 Paiement en ligne - panier conservé');
-        window.location.href = '/stripe-checkout?order=' + result.id;
-      } else {
-        // Vider le panier pour les autres modes
-        localStorage.removeItem('cart');
-        window.dispatchEvent(new Event('cart-updated'));
-        console.log('✅ Panier vidé');
-        window.location.href = '/confirmation?order=' + result.id;
-      }
-      
-    } catch (error) {
-      console.error('❌ Erreur:', error);
-      showToast('Une erreur est survenue lors de l\'envoi de votre commande. Veuillez réessayer.', 'error');
-      btn.disabled = false;
-      btn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        Confirmer la commande
-      `;
+      orderData.frais_livraison = selectedZone.frais;
+      orderData.zone_livraison = selectedZone.id;
+      orderData.temps_estime = selectedZone.temps_estime;
+    } else if (finalMode === 'emporter') {
+      orderData.frais_livraison = 0;
+      orderData.heure_souhaitee = clientData.heure_souhaitee || null;
+    } else if (finalMode === 'sur_place') {
+      orderData.frais_livraison = 0;
+      orderData.numero_table = clientData.numero_table || null;
     }
-  });
+    
+    orderData.prix_total = orderData.sous_total + (orderData.frais_livraison || 0);
+    
+    // Statut selon le mode de paiement
+    if (finalPaymentMethod === 'en_ligne') {
+      orderData.paiement = {
+        mode: 'en_ligne',
+        statut: 'en_attente_paiement',
+      };
+    } else {
+      orderData.paiement = {
+        mode: finalPaymentMethod,
+        statut: 'a_reception',
+      };
+    }
+    
+    console.log('📤 Envoi commande:', orderData);
+    
+    // ✅ Envoyer via api.ts
+    const result = await api.commandes.create(orderData);
+    
+    console.log('✅ Commande créée:', result);
+    
+    // Sauvegarder la commande pour la page de confirmation
+    localStorage.setItem('last_order', JSON.stringify(result));
+    
+    // Gestion selon le mode de paiement
+    if (finalPaymentMethod === 'en_ligne') {
+      // Ne pas vider le panier pour paiement Stripe
+      console.log('💳 Paiement en ligne - panier conservé');
+      window.location.href = '/stripe-checkout?order=' + result.id;
+    } else {
+      // Vider le panier pour les autres modes
+      localStorage.removeItem('cart');
+      window.dispatchEvent(new Event('cart-updated'));
+      console.log('✅ Panier vidé');
+      window.location.href = '/confirmation?order=' + result.id;
+    }
+    
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    showToast('Une erreur est survenue lors de l\'envoi de votre commande. Veuillez réessayer.', 'error');
+    btn.disabled = false;
+    btn.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+      </svg>
+      Confirmer la commande
+    `;
+  }
+});
 
-  // ==========================================
-  // Initialisation
-  // ==========================================
-  loadConfig();
-  loadCart();
+// ==========================================
+// Initialisation
+// ==========================================
+console.log('💳 Page Checkout chargée');
+
+loadConfig();
+loadCart();
 </script>

@@ -29,107 +29,104 @@ if (!hasAccess) {
   <title>Terminal POS - CMDOLA</title>
   <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
   
-  <style>
+  <style is:global>
+  /* ========================================== */
+  /* Animations & Styles custom */
+  /* ========================================== */
+  
+  .product-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  .product-card:active {
+    transform: scale(0.95);
+  }
+  
+  .product-card.out-of-stock {
+    opacity: 0.5;
+    filter: grayscale(1);
+  }
 
-
-    /* ========================================== */
-    /* FIX : Affichage des onglets */
-    /* ========================================== */
-
-    .tab-content {
-      display: block !important;
+  /* Animation pour le panier */
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
     }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
 
-    .tab-content.hidden {
-      display: none !important;
-    }
+  .cart-item-new {
+    animation: slideInRight 0.3s ease-out;
+  }
 
+  /* Pulse pour nouvelles commandes */
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+  }
+  
+  .new-order-pulse {
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
 
+  /* Badge temps urgent */
+  .time-urgent {
+    animation: pulse 2s ease-in-out infinite;
+  }
 
-    /* ========================================== */
-    /* Animations & Styles custom */
-    /* ========================================== */
-    .product-card {
-      transition: transform 0.2s, box-shadow 0.2s;
-      cursor: pointer;
-      user-select: none;
-    }
-    
-    .product-card:active {
-      transform: scale(0.95);
-    }
-    
-    .product-card.out-of-stock {
-      opacity: 0.5;
-      filter: grayscale(1);
-    }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 
-    /* Animation pour le panier */
-    @keyframes slideInRight {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
+  /* Scroll personnalisé */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
 
-    .cart-item-new {
-      animation: slideInRight 0.3s ease-out;
-    }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+  }
 
-    /* Pulse pour nouvelles commandes */
-    @keyframes pulse-ring {
-      0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-      100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
-    }
-    
-    .new-order-pulse {
-      animation: pulse-ring 1.5s ease-out infinite;
-    }
+  /* Grand affichage montant paiement */
+  .payment-display {
+    font-size: 5rem;
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+  }
 
-    /* Badge temps urgent */
-    .time-urgent {
-      animation: pulse 2s ease-in-out infinite;
-    }
+  /* Calculatrice rendu monnaie */
+  .money-calculator input {
+    font-size: 3rem;
+    text-align: center;
+    font-weight: bold;
+  }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
+  .change-amount {
+    font-size: 4rem;
+    font-weight: 900;
+  }
 
-    /* Scroll personnalisé */
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 8px;
-    }
+  /* ========================================== */
+  /* FIX ASTRO V5 : Affichage des onglets */
+  /* ========================================== */
+  
+  .tab-content {
+    display: block !important;
+  }
 
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(0,0,0,0.2);
-      border-radius: 4px;
-    }
-
-    /* Grand affichage montant paiement */
-    .payment-display {
-      font-size: 5rem;
-      font-weight: 900;
-      line-height: 1;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-    }
-
-    /* Calculatrice rendu monnaie */
-    .money-calculator input {
-      font-size: 3rem;
-      text-align: center;
-      font-weight: bold;
-    }
-
-    .change-amount {
-      font-size: 4rem;
-      font-weight: 900;
-    }
-  </style>
+  .tab-content.hidden {
+    display: none !important;
+  }
+</style>
 </head>
 
 <body class="bg-base-200 min-h-screen">

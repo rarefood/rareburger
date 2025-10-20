@@ -1,0 +1,1584 @@
+---
+// src/pages/admin/pos.astro
+// ============================================
+// 🏪 CMDOLA - Terminal Point de Vente (POS)
+// ============================================
+
+import "../../assets/app.css";
+
+export const prerender = false;
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+// Vérifier que l'utilisateur a les droits (admin ou chef)
+const hasAccess = user.roles?.includes('admin') || user.roles?.includes('chef');
+if (!hasAccess) {
+  return Astro.redirect('/login');
+}
+---
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Terminal POS - CMDOLA</title>
+  <link rel="icon" type="image/png" href="/favicon.ico" id="favicon">
+  
+  <style>
+    /* ========================================== */
+    /* Animations & Styles custom */
+    /* ========================================== */
+    
+    .product-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .product-card:active {
+      transform: scale(0.95);
+    }
+    
+    .product-card.out-of-stock {
+      opacity: 0.5;
+      filter: grayscale(1);
+    }
+
+    /* Animation pour le panier */
+    @keyframes slideInRight {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .cart-item-new {
+      animation: slideInRight 0.3s ease-out;
+    }
+
+    /* Pulse pour nouvelles commandes */
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+      100% { box-shadow: 0 0 0 20px rgba(59, 130, 246, 0); }
+    }
+    
+    .new-order-pulse {
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
+
+    /* Badge temps urgent */
+    .time-urgent {
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Scroll personnalisé */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.2);
+      border-radius: 4px;
+    }
+
+    /* Grand affichage montant paiement */
+    .payment-display {
+      font-size: 5rem;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Calculatrice rendu monnaie */
+    .money-calculator input {
+      font-size: 3rem;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .change-amount {
+      font-size: 4rem;
+      font-weight: 900;
+    }
+  </style>
+</head>
+
+<body class="bg-base-200 min-h-screen">
+  
+  <!-- ========================================== -->
+  <!-- Header -->
+  <!-- ========================================== -->
+  <div class="navbar bg-base-100 shadow-lg sticky top-0 z-50">
+    <div class="flex-1">
+      <img src="/favicon.ico" alt="Logo" class="w-12 h-12 rounded-lg mr-3" id="navLogo" />
+      <div>
+        <h1 class="text-2xl font-bold" id="restaurantName">Terminal POS</h1>
+        <p class="text-sm text-base-content/60" id="userName">Utilisateur</p>
+      </div>
+    </div>
+    
+    <div class="flex-none gap-2">
+      <!-- Indicateur auto-refresh -->
+      <div id="refreshIndicator" class="hidden">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+
+      <!-- Déconnexion -->
+      <a href="/logout" class="btn btn-error btn-circle" title="Déconnexion">
+        🚪
+      </a>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- Tabs Navigation -->
+  <!-- ========================================== -->
+  <div class="container mx-auto px-4 py-4">
+    <div role="tablist" class="tabs tabs-boxed tabs-lg bg-base-100 shadow-lg">
+      <a role="tab" class="tab tab-active" data-tab="caisse">💰 Caisse</a>
+      <a role="tab" class="tab" data-tab="commandes">📦 Commandes</a>
+      <a role="tab" class="tab" data-tab="takeaway">🥡 À emporter</a>
+      <a role="tab" class="tab" data-tab="stock">📊 Stock</a>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ONGLET 1 : CAISSE (POS) -->
+  <!-- ========================================== -->
+  <div id="tab-caisse" class="tab-content">
+    <div class="container mx-auto px-4 pb-8">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Colonne gauche : Produits -->
+        <div class="lg:col-span-2">
+          
+          <!-- Filtres catégories -->
+          <div class="flex gap-2 overflow-x-auto pb-4">
+            <button class="btn btn-sm category-filter active" data-category="all">Tout</button>
+            <!-- Rempli dynamiquement -->
+          </div>
+
+          <!-- Grille produits -->
+          <div id="productsGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+
+        <!-- Colonne droite : Panier -->
+        <div class="lg:col-span-1">
+          <div class="card bg-base-100 shadow-xl sticky top-24">
+            <div class="card-body">
+              <h2 class="card-title text-2xl mb-4">🛒 Panier</h2>
+              
+              <!-- Liste articles panier -->
+              <div id="cartItems" class="space-y-2 mb-4 max-h-96 overflow-y-auto custom-scrollbar">
+                <div class="text-center text-base-content/60 py-8">
+                  Panier vide
+                </div>
+              </div>
+
+              <div class="divider"></div>
+
+              <!-- Total -->
+              <div class="flex justify-between items-center text-2xl font-bold mb-4">
+                <span>TOTAL</span>
+                <span id="cartTotal" class="text-primary">0,00€</span>
+              </div>
+
+              <!-- Type de commande -->
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-bold">Type de commande</span>
+                </label>
+                <select id="orderType" class="select select-bordered select-lg">
+                  <option value="sur_place">🍽️ Sur place</option>
+                  <option value="emporter">🥡 À emporter</option>
+                </select>
+              </div>
+
+              <!-- Numéro de table (si sur place) -->
+              <div id="tableNumberGroup" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-bold">Numéro de table</span>
+                </label>
+                <input type="number" id="tableNumber" class="input input-bordered input-lg" placeholder="Ex: 5" min="1" />
+              </div>
+
+              <!-- Notes -->
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">Notes (optionnel)</span>
+                </label>
+                <textarea id="orderNotes" class="textarea textarea-bordered" placeholder="Instructions spéciales..."></textarea>
+              </div>
+
+              <!-- Boutons action -->
+              <div class="space-y-2">
+                <button id="validateOrder" class="btn btn-primary btn-lg btn-block" disabled>
+                  ✅ Valider la commande
+                </button>
+                <button id="clearCart" class="btn btn-error btn-outline btn-block">
+                  🗑️ Vider le panier
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ONGLET 2 : COMMANDES (Kanban) -->
+  <!-- ========================================== -->
+  <div id="tab-commandes" class="tab-content hidden">
+    <div class="container mx-auto px-4 pb-8">
+      
+      <!-- Compteurs -->
+      <div class="stats shadow-lg mb-6 w-full">
+        <div class="stat">
+          <div class="stat-title">Nouvelles</div>
+          <div class="stat-value text-warning" id="countNouvelles">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">En préparation</div>
+          <div class="stat-value text-info" id="countEnPreparation">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Prêtes</div>
+          <div class="stat-value text-success" id="countPretes">0</div>
+        </div>
+      </div>
+
+      <!-- Vue Kanban -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Colonne NOUVELLES -->
+        <div>
+          <div class="card bg-warning text-warning-content shadow-lg mb-4">
+            <div class="card-body p-4">
+              <h2 class="card-title text-xl">🆕 Nouvelles</h2>
+            </div>
+          </div>
+          <div id="colonneNouvelles" class="space-y-4 custom-scrollbar overflow-y-auto" style="max-height: calc(100vh - 400px);">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+
+        <!-- Colonne EN PRÉPARATION -->
+        <div>
+          <div class="card bg-info text-info-content shadow-lg mb-4">
+            <div class="card-body p-4">
+              <h2 class="card-title text-xl">👨‍🍳 En préparation</h2>
+            </div>
+          </div>
+          <div id="colonneEnPreparation" class="space-y-4 custom-scrollbar overflow-y-auto" style="max-height: calc(100vh - 400px);">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+
+        <!-- Colonne PRÊTES -->
+        <div>
+          <div class="card bg-success text-success-content shadow-lg mb-4">
+            <div class="card-body p-4">
+              <h2 class="card-title text-xl">✅ Prêtes</h2>
+            </div>
+          </div>
+          <div id="colonnePretes" class="space-y-4 custom-scrollbar overflow-y-auto" style="max-height: calc(100vh - 400px);">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ONGLET 3 : TAKEAWAY (À emporter) -->
+  <!-- ========================================== -->
+  <div id="tab-takeaway" class="tab-content hidden">
+    <div class="container mx-auto px-4 pb-8">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-3xl mb-6">🥡 Commandes à emporter</h2>
+          
+          <div id="takeawayList" class="space-y-4">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ONGLET 4 : STOCK -->
+  <!-- ========================================== -->
+  <div id="tab-stock" class="tab-content hidden">
+    <div class="container mx-auto px-4 pb-8">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-3xl mb-6">📊 Gestion du stock</h2>
+          
+          <!-- Filtres catégories -->
+          <div class="flex gap-2 overflow-x-auto pb-4 mb-6">
+            <button class="btn btn-sm stock-category-filter active" data-category="all">Tout</button>
+            <!-- Rempli dynamiquement -->
+          </div>
+
+          <div id="stockList" class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Produit</th>
+                  <th>Catégorie</th>
+                  <th>Prix</th>
+                  <th>Statut</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="stockTableBody">
+                <!-- Rempli par JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL : Configuration produit (caisse) -->
+  <!-- ========================================== -->
+  <dialog id="productModal" class="modal">
+    <div class="modal-box max-w-2xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <h3 class="font-bold text-3xl mb-4" id="modalProductName">Produit</h3>
+      
+      <div class="flex items-center gap-4 mb-6">
+        <img id="modalProductImage" src="" alt="" class="w-32 h-32 object-cover rounded-lg" />
+        <div class="flex-1">
+          <p id="modalProductDescription" class="text-base-content/70 mb-2"></p>
+          <p class="text-3xl font-bold text-primary" id="modalProductPrice">0,00€</p>
+        </div>
+      </div>
+
+      <div class="divider">Personnalisation</div>
+
+      <!-- Quantité -->
+      <div class="form-control mb-6">
+        <label class="label">
+          <span class="label-text font-bold text-lg">Quantité</span>
+        </label>
+        <div class="flex items-center gap-4">
+          <button id="decreaseQty" class="btn btn-circle btn-lg">-</button>
+          <input type="number" id="modalQuantity" class="input input-bordered input-lg text-center text-2xl font-bold w-24" value="1" min="1" />
+          <button id="increaseQty" class="btn btn-circle btn-lg">+</button>
+        </div>
+      </div>
+
+      <!-- Suppléments -->
+      <div id="supplementsSection" class="mb-6">
+        <label class="label">
+          <span class="label-text font-bold text-lg">Suppléments</span>
+        </label>
+        <div id="supplementsList" class="space-y-2">
+          <!-- Rempli dynamiquement -->
+        </div>
+      </div>
+
+      <!-- Retirer ingrédients -->
+      <div id="ingredientsSection" class="mb-6">
+        <label class="label">
+          <span class="label-text font-bold text-lg">Retirer des ingrédients</span>
+        </label>
+        <div id="ingredientsList" class="space-y-2">
+          <!-- Rempli dynamiquement -->
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="form-control mb-6">
+        <label class="label">
+          <span class="label-text font-bold text-lg">Instructions spéciales</span>
+        </label>
+        <textarea id="modalInstructions" class="textarea textarea-bordered" placeholder="Ex: Bien cuit, sans oignon..."></textarea>
+      </div>
+
+      <!-- Ajouter au panier -->
+      <button id="addToCartBtn" class="btn btn-primary btn-lg btn-block">
+        Ajouter au panier
+      </button>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+
+  <!-- ========================================== -->
+  <!-- MODAL : Détail commande (onglet commandes) -->
+  <!-- ========================================== -->
+  <dialog id="orderDetailModal" class="modal">
+    <div class="modal-box max-w-4xl">
+      <form method="dialog">
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+      </form>
+      
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h3 class="font-bold text-3xl mb-2" id="modalOrderNumero">Commande</h3>
+          <div class="flex gap-2">
+            <span class="badge badge-lg" id="modalOrderType">Type</span>
+            <span class="badge badge-lg" id="modalOrderTemps">Temps</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm text-base-content/60">Client</div>
+          <div class="font-bold text-xl" id="modalOrderClient">Client</div>
+          <div class="text-sm" id="modalOrderTelephone">Tel</div>
+        </div>
+      </div>
+
+      <div id="modalOrderTable" class="alert mb-4 hidden">
+        <span class="font-bold">Table:</span>
+        <span id="modalOrderTableNumero"></span>
+      </div>
+
+      <div class="divider">Articles</div>
+
+      <div class="space-y-3 mb-6" id="modalOrderArticles">
+        <!-- Rempli par JS -->
+      </div>
+
+      <div id="modalOrderNotes" class="alert alert-warning mb-6 hidden">
+        <div>
+          <div class="font-bold">💬 Instructions</div>
+          <div id="modalOrderNotesTexte"></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-bold">Changer le statut</span>
+          </label>
+          <select id="modalOrderStatut" class="select select-bordered select-lg">
+            <option value="nouvelle">🆕 Nouvelle</option>
+            <option value="en_preparation">👨‍🍳 En préparation</option>
+            <option value="prete">✅ Prête</option>
+            <option value="en_livraison">🚚 En livraison</option>
+            <option value="terminee">✔️ Terminée</option>
+          </select>
+        </div>
+
+        <div class="flex items-end">
+          <button id="confirmOrderStatus" class="btn btn-primary btn-lg btn-block">
+            Confirmer le changement
+          </button>
+        </div>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+
+  <!-- ========================================== -->
+  <!-- MODAL : Paiement CB -->
+  <!-- ========================================== -->
+  <dialog id="paymentCardModal" class="modal">
+    <div class="modal-box max-w-3xl">
+      <h3 class="font-bold text-3xl mb-8 text-center">💳 Paiement par CB</h3>
+      
+      <div class="text-center mb-8">
+        <p class="text-xl mb-4">Montant à payer :</p>
+        <div class="payment-display text-primary" id="cardPaymentAmount">0,00€</div>
+      </div>
+
+      <div class="alert alert-info mb-8">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Attendez la validation du paiement sur le terminal CB</span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <button id="confirmCardPayment" class="btn btn-success btn-lg">
+          ✅ Paiement validé
+        </button>
+        <button onclick="paymentCardModal.close()" class="btn btn-error btn-lg">
+          ❌ Annuler
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ========================================== -->
+  <!-- MODAL : Paiement Cash -->
+  <!-- ========================================== -->
+  <dialog id="paymentCashModal" class="modal">
+    <div class="modal-box max-w-3xl">
+      <h3 class="font-bold text-3xl mb-8 text-center">💵 Paiement en espèces</h3>
+      
+      <div class="text-center mb-8">
+        <p class="text-xl mb-4">Montant dû :</p>
+        <div class="payment-display text-primary mb-8" id="cashPaymentAmount">0,00€</div>
+
+        <div class="form-control money-calculator">
+          <label class="label">
+            <span class="label-text text-xl font-bold">Le client donne :</span>
+          </label>
+          <input 
+            type="number" 
+            id="cashGiven" 
+            class="input input-bordered input-lg" 
+            placeholder="0,00" 
+            step="0.01"
+            min="0"
+          />
+        </div>
+      </div>
+
+      <div id="changeSection" class="text-center mb-8 hidden">
+        <p class="text-xl mb-4">À rendre :</p>
+        <div class="change-amount text-success" id="changeAmount">0,00€</div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <button id="confirmCashPayment" class="btn btn-success btn-lg" disabled>
+          ✅ Commande payée
+        </button>
+        <button onclick="paymentCashModal.close()" class="btn btn-error btn-lg">
+          ❌ Annuler
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast toast-top toast-end z-50"></div>
+
+</body>
+</html>
+
+<script>
+// ==========================================
+// 🚀 IMPORTS
+// ==========================================
+import { api } from '../../lib/api';
+
+// ==========================================
+// 📊 VARIABLES GLOBALES
+// ==========================================
+let allProducts = [];
+let allCategories = [];
+let allSupplements = [];
+let currentCart = [];
+let currentCategoryFilter = 'all';
+let currentStockCategoryFilter = 'all';
+let allCommandes = [];
+let currentOrderId = null;
+let currentProductForCart = null;
+let autoRefreshInterval = null;
+
+// ==========================================
+// 🎨 CONFIGURATION & THÈME
+// ==========================================
+async function loadConfig() {
+  try {
+    const config = await api.config.get();
+    
+    if (config.theme?.daisy) {
+      document.documentElement.setAttribute('data-theme', config.theme.daisy);
+    }
+    
+    if (config.theme?.logo) {
+      const logoUrl = api.images.getUrl(config.theme.logo);
+      const favicon = document.getElementById('favicon');
+      const navLogo = document.getElementById('navLogo');
+      if (favicon) favicon.href = logoUrl;
+      if (navLogo) navLogo.src = logoUrl;
+    }
+
+    if (config.nom) {
+      const nameEl = document.getElementById('restaurantName');
+      if (nameEl) nameEl.textContent = config.nom;
+    }
+  } catch (error) {
+    console.error('❌ Erreur config:', error);
+  }
+}
+
+// ==========================================
+// 🔄 GESTION DES ONGLETS
+// ==========================================
+function initTabs() {
+  const tabs = document.querySelectorAll('.tabs .tab');
+  const contents = document.querySelectorAll('.tab-content');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.dataset.tab;
+
+      // Désactiver tous les tabs
+      tabs.forEach(t => t.classList.remove('tab-active'));
+      tab.classList.add('tab-active');
+
+      // Cacher tous les contenus
+      contents.forEach(c => c.classList.add('hidden'));
+
+      // Afficher le contenu ciblé
+      const targetContent = document.getElementById(`tab-${targetTab}`);
+      if (targetContent) {
+        targetContent.classList.remove('hidden');
+      }
+
+      // Actions spécifiques par onglet
+      if (targetTab === 'commandes') {
+        loadCommandes();
+      } else if (targetTab === 'takeaway') {
+        loadTakeawayOrders();
+      } else if (targetTab === 'stock') {
+        loadStock();
+      }
+    });
+  });
+}
+
+// ==========================================
+// 🛍️ ONGLET CAISSE - Chargement produits
+// ==========================================
+async function loadProducts() {
+  try {
+    console.log('🔄 Chargement menu...');
+    const menu = await api.menu.get();
+    
+    allProducts = menu.produits || [];
+    allCategories = menu.categories || [];
+    allSupplements = menu.supplements || [];
+
+    console.log(`✅ ${allProducts.length} produits chargés`);
+
+    renderCategoryFilters();
+    renderProducts();
+  } catch (error) {
+    console.error('❌ Erreur chargement menu:', error);
+    showToast('Erreur chargement du menu', 'error');
+  }
+}
+
+function renderCategoryFilters() {
+  const container = document.querySelector('.category-filter').parentElement;
+  
+  const html = [
+    '<button class="btn btn-sm category-filter active" data-category="all">Tout</button>',
+    ...allCategories.map(cat => 
+      `<button class="btn btn-sm category-filter" data-category="${cat.id}">
+        ${cat.icon || ''} ${cat.name}
+      </button>`
+    )
+  ].join('');
+
+  container.innerHTML = html;
+
+  // Event listeners
+  document.querySelectorAll('.category-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategoryFilter = btn.dataset.category;
+      renderProducts();
+    });
+  });
+}
+
+function renderProducts() {
+  const container = document.getElementById('productsGrid');
+  
+  let filtered = allProducts;
+  if (currentCategoryFilter !== 'all') {
+    filtered = allProducts.filter(p => p.categorie === currentCategoryFilter);
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="col-span-full text-center text-base-content/60 py-8">Aucun produit</div>';
+    return;
+  }
+
+  const html = filtered.map(product => {
+    const isAvailable = product.disponible !== false;
+    const imageUrl = product.image ? api.images.getUrl(product.image) : '/placeholder.jpg';
+
+    return `
+      <div class="card bg-base-100 shadow-lg product-card ${!isAvailable ? 'out-of-stock' : ''}" 
+           onclick="openProductModal('${product.id}')"
+           ${!isAvailable ? 'title="Rupture de stock"' : ''}>
+        <figure class="h-32">
+          <img src="${imageUrl}" alt="${product.nom}" class="object-cover w-full h-full" />
+        </figure>
+        <div class="card-body p-4">
+          <h3 class="card-title text-sm">${product.nom}</h3>
+          <p class="text-lg font-bold text-primary">${formatPrice(product.prix)}</p>
+          ${!isAvailable ? '<span class="badge badge-error">Rupture</span>' : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+// ==========================================
+// 🛍️ MODAL PRODUIT (configuration)
+// ==========================================
+window.openProductModal = function(productId) {
+  const product = allProducts.find(p => p.id === productId);
+  if (!product || product.disponible === false) {
+    showToast('Produit indisponible', 'warning');
+    return;
+  }
+
+  currentProductForCart = { ...product };
+
+  document.getElementById('modalProductName').textContent = product.nom;
+  document.getElementById('modalProductDescription').textContent = product.description || '';
+  document.getElementById('modalProductPrice').textContent = formatPrice(product.prix);
+  
+  const imageUrl = product.image ? api.images.getUrl(product.image) : '/placeholder.jpg';
+  document.getElementById('modalProductImage').src = imageUrl;
+
+  document.getElementById('modalQuantity').value = 1;
+  document.getElementById('modalInstructions').value = '';
+
+  // Suppléments
+  renderSupplements(product);
+
+  // Ingrédients à retirer
+  renderIngredients(product);
+
+  productModal.showModal();
+};
+
+function renderSupplements(product) {
+  const container = document.getElementById('supplementsList');
+  
+  if (!allSupplements || allSupplements.length === 0) {
+    document.getElementById('supplementsSection').classList.add('hidden');
+    return;
+  }
+
+  document.getElementById('supplementsSection').classList.remove('hidden');
+
+  const html = allSupplements.map(supp => `
+    <label class="label cursor-pointer justify-start gap-4">
+      <input type="checkbox" class="checkbox checkbox-primary supplement-checkbox" 
+             data-id="${supp.id}" 
+             data-name="${supp.name}" 
+             data-price="${supp.price}" />
+      <span class="label-text">${supp.name} (+${formatPrice(supp.price)})</span>
+    </label>
+  `).join('');
+
+  container.innerHTML = html;
+}
+
+function renderIngredients(product) {
+  const container = document.getElementById('ingredientsList');
+  
+  if (!product.ingredients || product.ingredients.length === 0) {
+    document.getElementById('ingredientsSection').classList.add('hidden');
+    return;
+  }
+
+  document.getElementById('ingredientsSection').classList.remove('hidden');
+
+  const html = product.ingredients.map(ing => `
+    <label class="label cursor-pointer justify-start gap-4">
+      <input type="checkbox" class="checkbox checkbox-error ingredient-checkbox" data-name="${ing}" />
+      <span class="label-text">Sans ${ing}</span>
+    </label>
+  `).join('');
+
+  container.innerHTML = html;
+}
+
+// Quantité
+document.getElementById('increaseQty').addEventListener('click', () => {
+  const input = document.getElementById('modalQuantity');
+  input.value = parseInt(input.value) + 1;
+});
+
+document.getElementById('decreaseQty').addEventListener('click', () => {
+  const input = document.getElementById('modalQuantity');
+  if (parseInt(input.value) > 1) {
+    input.value = parseInt(input.value) - 1;
+  }
+});
+
+// Ajouter au panier
+document.getElementById('addToCartBtn').addEventListener('click', () => {
+  const quantity = parseInt(document.getElementById('modalQuantity').value);
+  
+  // Récupérer suppléments sélectionnés
+  const supplements = [];
+  document.querySelectorAll('.supplement-checkbox:checked').forEach(cb => {
+    supplements.push({
+      id: cb.dataset.id,
+      name: cb.dataset.name,
+      price: parseFloat(cb.dataset.price)
+    });
+  });
+
+  // Récupérer ingrédients retirés
+  const removedIngredients = [];
+  document.querySelectorAll('.ingredient-checkbox:checked').forEach(cb => {
+    removedIngredients.push(cb.dataset.name);
+  });
+
+  const instructions = document.getElementById('modalInstructions').value;
+
+  // Calculer prix total avec suppléments
+  let totalPrice = currentProductForCart.prix;
+  supplements.forEach(supp => {
+    totalPrice += supp.price;
+  });
+
+  const cartItem = {
+    id: currentProductForCart.id,
+    nom: currentProductForCart.nom,
+    prix: totalPrice,
+    quantite: quantity,
+    supplements: supplements,
+    removed_ingredients: removedIngredients,
+    instructions: instructions
+  };
+
+  currentCart.push(cartItem);
+  updateCartDisplay();
+  productModal.close();
+  showToast('Ajouté au panier', 'success');
+});
+
+// ==========================================
+// 🛒 GESTION DU PANIER
+// ==========================================
+function updateCartDisplay() {
+  const container = document.getElementById('cartItems');
+  const totalEl = document.getElementById('cartTotal');
+  const validateBtn = document.getElementById('validateOrder');
+
+  if (currentCart.length === 0) {
+    container.innerHTML = '<div class="text-center text-base-content/60 py-8">Panier vide</div>';
+    totalEl.textContent = '0,00€';
+    validateBtn.disabled = true;
+    return;
+  }
+
+  const html = currentCart.map((item, index) => `
+    <div class="card bg-base-200 cart-item-new">
+      <div class="card-body p-3">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <div class="font-bold">${item.quantite}x ${item.nom}</div>
+            ${item.supplements.length > 0 ? `
+              <div class="text-xs text-success">+ ${item.supplements.map(s => s.name).join(', ')}</div>
+            ` : ''}
+            ${item.removed_ingredients.length > 0 ? `
+              <div class="text-xs text-error">Sans: ${item.removed_ingredients.join(', ')}</div>
+            ` : ''}
+            ${item.instructions ? `
+              <div class="text-xs text-base-content/60">${item.instructions}</div>
+            ` : ''}
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold">${formatPrice(item.prix * item.quantite)}</span>
+            <button class="btn btn-ghost btn-xs btn-circle" onclick="removeFromCart(${index})">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  container.innerHTML = html;
+
+  const total = currentCart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+  totalEl.textContent = formatPrice(total);
+  validateBtn.disabled = false;
+}
+
+window.removeFromCart = function(index) {
+  currentCart.splice(index, 1);
+  updateCartDisplay();
+};
+
+document.getElementById('clearCart').addEventListener('click', () => {
+  if (confirm('Vider le panier ?')) {
+    currentCart = [];
+    updateCartDisplay();
+  }
+});
+
+// Afficher/masquer numéro de table
+document.getElementById('orderType').addEventListener('change', (e) => {
+  const tableGroup = document.getElementById('tableNumberGroup');
+  if (e.target.value === 'sur_place') {
+    tableGroup.classList.remove('hidden');
+  } else {
+    tableGroup.classList.add('hidden');
+  }
+});
+
+// ==========================================
+// ✅ VALIDATION COMMANDE
+// ==========================================
+document.getElementById('validateOrder').addEventListener('click', async () => {
+  if (currentCart.length === 0) return;
+
+  const orderType = document.getElementById('orderType').value;
+  const tableNumber = document.getElementById('tableNumber').value;
+  const notes = document.getElementById('orderNotes').value;
+
+  // Vérifier numéro de table si sur place
+  if (orderType === 'sur_place' && !tableNumber) {
+    showToast('Veuillez indiquer le numéro de table', 'warning');
+    return;
+  }
+
+  const total = currentCart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+
+  // Demander mode de paiement
+  const paymentMode = await showPaymentChoice();
+  if (!paymentMode) return;
+
+  // Afficher modal de paiement approprié
+  if (paymentMode === 'card') {
+    document.getElementById('cardPaymentAmount').textContent = formatPrice(total);
+    paymentCardModal.showModal();
+  } else if (paymentMode === 'cash') {
+    document.getElementById('cashPaymentAmount').textContent = formatPrice(total);
+    document.getElementById('cashGiven').value = '';
+    document.getElementById('changeSection').classList.add('hidden');
+    paymentCashModal.showModal();
+  }
+});
+
+// Choix du mode de paiement
+function showPaymentChoice() {
+  return new Promise((resolve) => {
+    const result = confirm('Paiement par CB ?\n\nOK = CB\nAnnuler = Espèces');
+    resolve(result ? 'card' : 'cash');
+  });
+}
+
+// Confirmer paiement CB
+document.getElementById('confirmCardPayment').addEventListener('click', async () => {
+  await finalizeOrder('card');
+  paymentCardModal.close();
+});
+
+// Calcul rendu monnaie
+document.getElementById('cashGiven').addEventListener('input', (e) => {
+  const total = currentCart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+  const given = parseFloat(e.target.value) || 0;
+  const change = given - total;
+
+  const changeSection = document.getElementById('changeSection');
+  const confirmBtn = document.getElementById('confirmCashPayment');
+
+  if (change >= 0) {
+    document.getElementById('changeAmount').textContent = formatPrice(change);
+    changeSection.classList.remove('hidden');
+    confirmBtn.disabled = false;
+  } else {
+    changeSection.classList.add('hidden');
+    confirmBtn.disabled = true;
+  }
+});
+
+// Confirmer paiement Cash
+document.getElementById('confirmCashPayment').addEventListener('click', async () => {
+  await finalizeOrder('cash');
+  paymentCashModal.close();
+});
+
+// ==========================================
+// 💾 FINALISER LA COMMANDE
+// ==========================================
+async function finalizeOrder(paymentMode) {
+  try {
+    const orderType = document.getElementById('orderType').value;
+    const tableNumber = document.getElementById('tableNumber').value;
+    const notes = document.getElementById('orderNotes').value;
+
+    const total = currentCart.reduce((sum, item) => sum + (item.prix * item.quantite), 0);
+
+    const orderData = {
+      client: {
+        nom: 'Caisse',
+        prenom: '',
+        telephone: 'N/A',
+        email: ''
+      },
+      type: orderType,
+      articles: currentCart,
+      sous_total: total,
+      frais_livraison: 0,
+      prix_total: total,
+      paiement: {
+        mode: paymentMode === 'card' ? 'comptoir' : 'comptoir',
+        statut: 'paye'
+      },
+      notes: notes,
+      numero_table: orderType === 'sur_place' ? tableNumber : null
+    };
+
+    console.log('📤 Création commande caisse...');
+    const response = await api.commandes.create(orderData);
+    
+    console.log('✅ Commande créée:', response.numero);
+
+    // TODO: Implémenter impression Epson POS
+    console.log('🖨️ Impression ticket simulée');
+    console.log('Ticket:', {
+      numero: response.numero,
+      articles: currentCart,
+      total: total,
+      paiement: paymentMode
+    });
+
+    showToast(`Commande ${response.numero} validée !`, 'success');
+
+    // Vider le panier
+    currentCart = [];
+    updateCartDisplay();
+    document.getElementById('orderNotes').value = '';
+    document.getElementById('tableNumber').value = '';
+
+  } catch (error) {
+    console.error('❌ Erreur création commande:', error);
+    showToast('Erreur lors de la création de la commande', 'error');
+  }
+}
+
+// ==========================================
+// 📦 ONGLET COMMANDES (Kanban)
+// ==========================================
+async function loadCommandes() {
+  try {
+    document.getElementById('refreshIndicator').classList.remove('hidden');
+    
+    console.log('🔄 Chargement commandes actives...');
+    const data = await api.commandes.listActives();
+    
+    allCommandes = data.commandes || [];
+    allCommandes.sort((a, b) => new Date(a.date_creation) - new Date(b.date_creation));
+
+    console.log(`✅ ${allCommandes.length} commandes chargées`);
+
+    renderKanban();
+    updateCounters();
+
+  } catch (error) {
+    console.error('❌ Erreur chargement commandes:', error);
+    showToast('Erreur chargement commandes', 'error');
+  } finally {
+    setTimeout(() => {
+      document.getElementById('refreshIndicator').classList.add('hidden');
+    }, 500);
+  }
+}
+
+function updateCounters() {
+  const nouvelles = allCommandes.filter(c => c.statut === 'nouvelle').length;
+  const enPreparation = allCommandes.filter(c => c.statut === 'en_preparation').length;
+  const pretes = allCommandes.filter(c => c.statut === 'prete' || c.statut === 'en_livraison').length;
+
+  document.getElementById('countNouvelles').textContent = nouvelles;
+  document.getElementById('countEnPreparation').textContent = enPreparation;
+  document.getElementById('countPretes').textContent = pretes;
+}
+
+function renderKanban() {
+  renderKanbanColumn('nouvelle', 'colonneNouvelles');
+  renderKanbanColumn('en_preparation', 'colonneEnPreparation');
+  renderKanbanColumn(['prete', 'en_livraison'], 'colonnePretes');
+}
+
+function renderKanbanColumn(statut, containerId) {
+  const container = document.getElementById(containerId);
+  const statuts = Array.isArray(statut) ? statut : [statut];
+  const commandes = allCommandes.filter(c => statuts.includes(c.statut));
+
+  if (commandes.length === 0) {
+    container.innerHTML = `
+      <div class="card bg-base-100 shadow-sm opacity-50">
+        <div class="card-body text-center py-8">
+          <p class="text-base-content/60">Aucune commande</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = commandes.map(cmd => {
+    const typeInfo = getTypeInfo(cmd.type);
+    const timeInfo = getTimeElapsed(cmd.date_creation);
+    const articleCount = cmd.articles.reduce((sum, a) => sum + a.quantite, 0);
+
+    return `
+      <div class="card bg-base-100 shadow-lg hover:shadow-2xl cursor-pointer" 
+           onclick="openOrderDetailModal('${cmd.id}')">
+        <div class="card-body p-4">
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <h3 class="card-title text-xl font-mono">#${cmd.numero}</h3>
+              <div class="flex gap-1 mt-1">
+                <span class="badge ${typeInfo.badge} badge-sm">
+                  ${typeInfo.icon} ${typeInfo.label}
+                </span>
+              </div>
+            </div>
+            <span class="badge badge-lg ${timeInfo.urgent ? 'badge-error time-urgent' : 'badge-ghost'}">
+              ${timeInfo.text}
+            </span>
+          </div>
+
+          ${cmd.numero_table ? `<div class="text-sm">Table ${cmd.numero_table}</div>` : ''}
+
+          <div class="flex justify-between items-center mt-2 pt-2 border-t">
+            <span class="text-sm">${articleCount} article${articleCount > 1 ? 's' : ''}</span>
+            <span class="font-bold text-lg">${formatPrice(cmd.prix_total)}</span>
+          </div>
+
+          ${cmd.notes ? `
+            <div class="alert alert-warning alert-sm mt-2">
+              <span class="text-xs">Instructions spéciales</span>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ==========================================
+// 📋 MODAL DÉTAIL COMMANDE
+// ==========================================
+window.openOrderDetailModal = function(commandeId) {
+  const commande = allCommandes.find(c => c.id === commandeId);
+  if (!commande) return;
+
+  currentOrderId = commandeId;
+  const typeInfo = getTypeInfo(commande.type);
+
+  document.getElementById('modalOrderNumero').textContent = `#${commande.numero}`;
+  document.getElementById('modalOrderType').textContent = `${typeInfo.icon} ${typeInfo.label}`;
+  document.getElementById('modalOrderType').className = `badge badge-lg ${typeInfo.badge}`;
+  
+  const timeInfo = getTimeElapsed(commande.date_creation);
+  document.getElementById('modalOrderTemps').textContent = timeInfo.text;
+  document.getElementById('modalOrderTemps').className = `badge badge-lg ${timeInfo.urgent ? 'badge-error' : 'badge-ghost'}`;
+
+  document.getElementById('modalOrderClient').textContent = `${commande.client?.prenom || ''} ${commande.client?.nom || 'Client'}`;
+  document.getElementById('modalOrderTelephone').textContent = commande.client?.telephone || '';
+
+  const modalTable = document.getElementById('modalOrderTable');
+  if (commande.numero_table) {
+    document.getElementById('modalOrderTableNumero').textContent = commande.numero_table;
+    modalTable.classList.remove('hidden');
+  } else {
+    modalTable.classList.add('hidden');
+  }
+
+  const articlesHtml = commande.articles.map(article => `
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <div class="flex items-center gap-2">
+              <span class="badge badge-lg badge-primary">${article.quantite}x</span>
+              <span class="font-bold text-lg">${article.nom}</span>
+            </div>
+            ${article.supplements && article.supplements.length > 0 ? `
+              <div class="text-sm text-success mt-2">
+                + ${article.supplements.map(s => s.name).join(', ')}
+              </div>
+            ` : ''}
+            ${article.removed_ingredients && article.removed_ingredients.length > 0 ? `
+              <div class="text-sm text-error mt-1">
+                Sans: ${article.removed_ingredients.join(', ')}
+              </div>
+            ` : ''}
+          </div>
+          <span class="font-bold text-xl">${formatPrice(article.prix * article.quantite)}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('modalOrderArticles').innerHTML = articlesHtml;
+
+  const modalNotes = document.getElementById('modalOrderNotes');
+  if (commande.notes) {
+    document.getElementById('modalOrderNotesTexte').textContent = commande.notes;
+    modalNotes.classList.remove('hidden');
+  } else {
+    modalNotes.classList.add('hidden');
+  }
+
+  document.getElementById('modalOrderStatut').value = commande.statut;
+
+  orderDetailModal.showModal();
+};
+
+// Confirmer changement statut
+document.getElementById('confirmOrderStatus').addEventListener('click', async () => {
+  const newStatut = document.getElementById('modalOrderStatut').value;
+
+  try {
+    console.log(`🔄 Changement statut: ${currentOrderId} → ${newStatut}`);
+    await api.commandes.updateStatus(currentOrderId, newStatut);
+    console.log('✅ Statut mis à jour');
+
+    orderDetailModal.close();
+    await loadCommandes();
+    showToast('Statut mis à jour', 'success');
+  } catch (error) {
+    console.error('❌ Erreur changement statut:', error);
+    showToast('Erreur lors du changement de statut', 'error');
+  }
+});
+
+// ==========================================
+// 🥡 ONGLET TAKEAWAY
+// ==========================================
+async function loadTakeawayOrders() {
+  try {
+    console.log('🔄 Chargement commandes à emporter...');
+    const data = await api.commandes.listActives();
+    
+    const takeawayOrders = (data.commandes || [])
+      .filter(c => c.type === 'emporter')
+      .sort((a, b) => new Date(a.date_creation) - new Date(b.date_creation));
+
+    console.log(`✅ ${takeawayOrders.length} commandes à emporter`);
+
+    renderTakeawayList(takeawayOrders);
+
+  } catch (error) {
+    console.error('❌ Erreur chargement takeaway:', error);
+    showToast('Erreur chargement commandes', 'error');
+  }
+}
+
+function renderTakeawayList(orders) {
+  const container = document.getElementById('takeawayList');
+
+  if (orders.length === 0) {
+    container.innerHTML = `
+      <div class="text-center text-base-content/60 py-8">
+        Aucune commande à emporter
+      </div>
+    `;
+    return;
+  }
+
+  const html = orders.map(order => {
+    const timeInfo = getTimeElapsed(order.date_creation);
+    const articleCount = order.articles.reduce((sum, a) => sum + a.quantite, 0);
+    const statusBadge = getStatusBadge(order.statut);
+
+    return `
+      <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <h3 class="card-title text-2xl font-mono">#${order.numero}</h3>
+              <div class="text-base-content/70 mt-1">
+                ${order.client?.prenom || ''} ${order.client?.nom || 'Client'}
+              </div>
+              <div class="text-sm text-base-content/60">${order.client?.telephone || ''}</div>
+            </div>
+            <div class="text-right">
+              <span class="badge ${statusBadge.class} badge-lg mb-2">${statusBadge.label}</span>
+              <div class="badge badge-lg ${timeInfo.urgent ? 'badge-error' : 'badge-ghost'}">
+                ${timeInfo.text}
+              </div>
+            </div>
+          </div>
+
+          <div class="divider my-2"></div>
+
+          <div class="space-y-1 mb-4">
+            ${order.articles.map(a => `
+              <div class="flex justify-between">
+                <span>${a.quantite}x ${a.nom}</span>
+                <span class="font-bold">${formatPrice(a.prix * a.quantite)}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="flex justify-between items-center text-xl font-bold mb-4">
+            <span>TOTAL</span>
+            <span class="text-primary">${formatPrice(order.prix_total)}</span>
+          </div>
+
+          ${order.statut !== 'terminee' ? `
+            <button onclick="markTakeawayComplete('${order.id}')" class="btn btn-success btn-lg btn-block">
+              ✅ Donnée au client
+            </button>
+          ` : `
+            <div class="alert alert-success">
+              <span>✅ Commande terminée</span>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+window.markTakeawayComplete = async function(orderId) {
+  try {
+    console.log(`✅ Marquer comme terminée: ${orderId}`);
+    await api.commandes.updateStatus(orderId, 'terminee');
+    showToast('Commande marquée comme donnée', 'success');
+    await loadTakeawayOrders();
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    showToast('Erreur lors de la mise à jour', 'error');
+  }
+};
+
+// ==========================================
+// 📊 ONGLET STOCK
+// ==========================================
+async function loadStock() {
+  try {
+    console.log('🔄 Chargement stock...');
+    const menu = await api.menu.get();
+    
+    allProducts = menu.produits || [];
+    allCategories = menu.categories || [];
+
+    renderStockCategoryFilters();
+    renderStockTable();
+
+  } catch (error) {
+    console.error('❌ Erreur chargement stock:', error);
+    showToast('Erreur chargement stock', 'error');
+  }
+}
+
+function renderStockCategoryFilters() {
+  const container = document.querySelector('.stock-category-filter').parentElement;
+  
+  const html = [
+    '<button class="btn btn-sm stock-category-filter active" data-category="all">Tout</button>',
+    ...allCategories.map(cat => 
+      `<button class="btn btn-sm stock-category-filter" data-category="${cat.id}">
+        ${cat.icon || ''} ${cat.name}
+      </button>`
+    )
+  ].join('');
+
+  container.innerHTML = html;
+
+  document.querySelectorAll('.stock-category-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.stock-category-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentStockCategoryFilter = btn.dataset.category;
+      renderStockTable();
+    });
+  });
+}
+
+function renderStockTable() {
+  const tbody = document.getElementById('stockTableBody');
+  
+  let filtered = allProducts;
+  if (currentStockCategoryFilter !== 'all') {
+    filtered = allProducts.filter(p => p.categorie === currentStockCategoryFilter);
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-base-content/60 py-8">Aucun produit</td></tr>';
+    return;
+  }
+
+  const html = filtered.map(product => {
+    const isAvailable = product.disponible !== false;
+    const categoryName = allCategories.find(c => c.id === product.categorie)?.name || product.categorie;
+
+    return `
+      <tr>
+        <td>
+          <div class="flex items-center gap-3">
+            <div class="avatar">
+              <div class="mask mask-squircle h-12 w-12">
+                <img src="${product.image ? api.images.getUrl(product.image) : '/placeholder.jpg'}" alt="${product.nom}" />
+              </div>
+            </div>
+            <div class="font-bold">${product.nom}</div>
+          </div>
+        </td>
+        <td>${categoryName}</td>
+        <td class="font-bold">${formatPrice(product.prix)}</td>
+        <td>
+          <span class="badge ${isAvailable ? 'badge-success' : 'badge-error'} badge-lg">
+            ${isAvailable ? '✅ Disponible' : '❌ Rupture'}
+          </span>
+        </td>
+        <td>
+          <button onclick="toggleProductStock('${product.id}')" class="btn ${isAvailable ? 'btn-error' : 'btn-success'} btn-sm">
+            ${isAvailable ? 'Mettre en rupture' : 'Remettre en stock'}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.innerHTML = html;
+}
+
+window.toggleProductStock = async function(productId) {
+  try {
+    const product = allProducts.find(p => p.id === productId);
+    if (!product) return;
+
+    const newStatus = !(product.disponible !== false);
+
+    console.log(`🔄 Toggle stock: ${productId} → ${newStatus}`);
+
+    await api.menu.updateProduct(productId, { disponible: newStatus });
+
+    showToast(`Produit ${newStatus ? 'remis en stock' : 'en rupture'}`, 'success');
+    await loadStock();
+
+  } catch (error) {
+    console.error('❌ Erreur toggle stock:', error);
+    showToast('Erreur lors de la mise à jour', 'error');
+  }
+};
+
+// ==========================================
+// 🛠️ UTILITAIRES
+// ==========================================
+function formatPrice(price) {
+  return new Intl.NumberFormat('fr-BE', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+}
+
+function getTimeElapsed(dateStr) {
+  const now = new Date();
+  const orderDate = new Date(dateStr);
+  const diffMs = now - orderDate;
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return { text: "À l'instant", urgent: false };
+  if (diffMins === 1) return { text: "Il y a 1 min", urgent: false };
+  if (diffMins < 15) return { text: `Il y a ${diffMins} min`, urgent: false };
+  if (diffMins < 30) return { text: `Il y a ${diffMins} min`, urgent: true };
+  if (diffMins < 60) return { text: `Il y a ${diffMins} min ⚠️`, urgent: true };
+  
+  const diffHours = Math.floor(diffMins / 60);
+  return { text: `Il y a ${diffHours}h${diffMins % 60}`, urgent: true };
+}
+
+function getTypeInfo(type) {
+  const types = {
+    'sur_place': { icon: '🍽️', badge: 'badge-success', label: 'Sur place' },
+    'emporter': { icon: '🥡', badge: 'badge-info', label: 'À emporter' },
+    'livraison': { icon: '🚚', badge: 'badge-primary', label: 'Livraison' }
+  };
+  return types[type] || { icon: '📦', badge: 'badge-ghost', label: type };
+}
+
+function getStatusBadge(statut) {
+  const statuses = {
+    'nouvelle': { class: 'badge-warning', label: '🆕 Nouvelle' },
+    'en_preparation': { class: 'badge-info', label: '👨‍🍳 En préparation' },
+    'prete': { class: 'badge-success', label: '✅ Prête' },
+    'en_livraison': { class: 'badge-primary', label: '🚚 En livraison' },
+    'terminee': { class: 'badge-ghost', label: '✔️ Terminée' }
+  };
+  return statuses[statut] || { class: 'badge-ghost', label: statut };
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const alertClass = {
+    'success': 'alert-success',
+    'error': 'alert-error',
+    'warning': 'alert-warning',
+    'info': 'alert-info'
+  }[type] || 'alert-info';
+
+  const toast = document.createElement('div');
+  toast.className = `alert ${alertClass} shadow-lg`;
+  toast.innerHTML = `<span>${message}</span>`;
+  
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+
+// ==========================================
+// 🔄 AUTO-REFRESH (onglets commandes/takeaway)
+// ==========================================
+function startAutoRefresh() {
+  if (autoRefreshInterval) return;
+  autoRefreshInterval = setInterval(() => {
+    const activeTab = document.querySelector('.tab.tab-active').dataset.tab;
+    if (activeTab === 'commandes') {
+      loadCommandes();
+    } else if (activeTab === 'takeaway') {
+      loadTakeawayOrders();
+    }
+  }, 15000); // 15 secondes
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+}
+
+// ==========================================
+// 🚀 INITIALISATION
+// ==========================================
+console.log('🏪 Terminal POS chargé');
+
+loadConfig();
+initTabs();
+loadProducts();
+startAutoRefresh();
+
+window.addEventListener('beforeunload', stopAutoRefresh);
+</script>

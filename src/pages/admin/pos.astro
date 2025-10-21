@@ -700,7 +700,8 @@ async function loadProducts() {
 }
 
 function renderCategoryFilters() {
-  const container = document.querySelector('.category-filter').parentElement;
+  const container = document.querySelector('.category-filter')?.parentElement;
+  if (!container) return;
   
   const html = [
     '<button class="btn btn-sm category-filter active" data-category="all">Tout</button>',
@@ -713,15 +714,22 @@ function renderCategoryFilters() {
 
   container.innerHTML = html;
 
-  // Event listeners
-  document.querySelectorAll('.category-filter').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentCategoryFilter = btn.dataset.category;
-      renderProducts();
+  // ✅ NOUVEAU : Attacher les événements APRÈS le render
+  setTimeout(() => {
+    document.querySelectorAll('.category-filter').forEach(btn => {
+      btn.addEventListener('click', function() {
+        // Retirer active de tous
+        document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+        // Ajouter active au bouton cliqué
+        this.classList.add('active');
+        
+        // Filtrer
+        currentCategoryFilter = this.dataset.category;
+        console.log('🔵 Filtre appliqué:', currentCategoryFilter);
+        renderProducts();
+      });
     });
-  });
+  }, 0);
 }
 
 function renderProducts() {
@@ -742,9 +750,10 @@ function renderProducts() {
     const imageUrl = product.image ? api.images.getUrl(product.image) : '/placeholder.jpg';
 
     return `
-      <div class="card bg-base-100 shadow-lg product-card ${!isAvailable ? 'out-of-stock' : ''}" 
-           onclick="openProductModal('${product.id}')"
-           ${!isAvailable ? 'title="Rupture de stock"' : ''}>
+       <div class="card bg-base-100 shadow-lg product-card ${!isAvailable ? 'out-of-stock' : ''}" 
+            data-category="${product.categorie || 'autres'}"
+            onclick="openProductModal('${product.id}')"
+            ${!isAvailable ? 'title="Rupture de stock"' : ''}>
         <figure class="h-32">
           <img src="${imageUrl}" alt="${product.nom}" class="object-cover w-full h-full" />
         </figure>
@@ -1404,7 +1413,8 @@ async function loadStock() {
 }
 
 function renderStockCategoryFilters() {
-  const container = document.querySelector('.stock-category-filter').parentElement;
+  const container = document.querySelector('.stock-category-filter')?.parentElement;
+  if (!container) return;
   
   const html = [
     '<button class="btn btn-sm stock-category-filter active" data-category="all">Tout</button>',
@@ -1417,14 +1427,19 @@ function renderStockCategoryFilters() {
 
   container.innerHTML = html;
 
-  document.querySelectorAll('.stock-category-filter').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.stock-category-filter').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentStockCategoryFilter = btn.dataset.category;
-      renderStockTable();
+  // ✅ NOUVEAU : Attacher les événements APRÈS le render
+  setTimeout(() => {
+    document.querySelectorAll('.stock-category-filter').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.stock-category-filter').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        currentStockCategoryFilter = this.dataset.category;
+        console.log('🔵 Filtre stock appliqué:', currentStockCategoryFilter);
+        renderStockTable();
+      });
     });
-  });
+  }, 0);
 }
 
 function renderStockTable() {

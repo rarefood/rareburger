@@ -586,6 +586,51 @@ if (!hasAccess) {
     </div>
   </dialog>
 
+  <!-- ========================================== -->
+  <!-- MODAL : Paiement Cash -->
+  <!-- ========================================== -->
+
+  <dialog id="paymentChoiceModal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-3xl mb-8 text-center">💳 Mode de paiement</h3>
+    
+    <p class="text-center text-lg mb-8 text-base-content/70">
+      Comment le client souhaite-t-il payer ?
+    </p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      
+      <!-- Bouton CB -->
+      <button id="choiceCardBtn" class="btn btn-lg h-auto py-8 flex-col gap-4 hover:scale-105 transition-transform">
+        <div class="text-6xl">💳</div>
+        <div>
+          <div class="text-2xl font-bold">Carte bancaire</div>
+          <div class="text-sm opacity-70">Terminal de paiement</div>
+        </div>
+      </button>
+
+      <!-- Bouton Cash -->
+      <button id="choiceCashBtn" class="btn btn-lg h-auto py-8 flex-col gap-4 hover:scale-105 transition-transform">
+        <div class="text-6xl">💵</div>
+        <div>
+          <div class="text-2xl font-bold">Espèces</div>
+          <div class="text-sm opacity-70">Paiement en liquide</div>
+        </div>
+      </button>
+
+    </div>
+
+    <div class="modal-action justify-center">
+      <button onclick="paymentChoiceModal.close()" class="btn btn-ghost btn-lg">
+        Annuler
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
   <!-- Toast Container -->
   <div id="toast-container" class="toast toast-top toast-end z-50"></div>
 
@@ -734,10 +779,10 @@ function renderCategoryFilters() {
 
 function renderProducts() {
   const container = document.getElementById('productsGrid');
-  
+ 
   let filtered = allProducts;
   if (currentCategoryFilter !== 'all') {
-    filtered = allProducts.filter(p => p.categorie === currentCategoryFilter);
+    filtered = allProducts.filter(p => p.category === currentCategoryFilter);
   }
 
   if (filtered.length === 0) {
@@ -747,13 +792,17 @@ function renderProducts() {
 
   const html = filtered.map(product => {
     const isAvailable = product.disponible !== false;
-    const imageUrl = product.image ? api.images.getUrl(product.image) : '/placeholder.jpg';
+    
+    // ✅ FIX : Utiliser images[0] au lieu de image
+    const imageUrl = product.images && product.images[0] 
+      ? api.images.getUrl(product.images[0]) 
+      : 'https://via.placeholder.com/400/e5e7eb/6b7280?text=Pas+d\'image';
 
     return `
-       <div class="card bg-base-100 shadow-lg product-card ${!isAvailable ? 'out-of-stock' : ''}" 
-            data-category="${product.categorie || 'autres'}"
-            onclick="openProductModal('${product.id}')"
-            ${!isAvailable ? 'title="Rupture de stock"' : ''}>
+      <div class="card bg-base-100 shadow-lg product-card ${!isAvailable ? 'out-of-stock' : ''}"
+           data-category="${product.category || 'autres'}"
+           onclick="openProductModal('${product.id}')"
+           ${!isAvailable ? 'title="Rupture de stock"' : ''}>
         <figure class="h-32">
           <img src="${imageUrl}" alt="${product.nom}" class="object-cover w-full h-full" />
         </figure>
@@ -989,7 +1038,10 @@ document.getElementById('validateOrder').addEventListener('click', async () => {
 
   // Demander mode de paiement
   const paymentMode = await showPaymentChoice();
-  if (!paymentMode) return;
+  if (!paymentMode) {
+    showToast('Paiement annulé', 'info');
+    return;
+  }
 
   // Afficher modal de paiement approprié
   if (paymentMode === 'card') {
@@ -1004,10 +1056,39 @@ document.getElementById('validateOrder').addEventListener('click', async () => {
 });
 
 // Choix du mode de paiement
+// Choix du mode de paiement avec modal
 function showPaymentChoice() {
   return new Promise((resolve) => {
-    const result = confirm('Paiement par CB ?\n\nOK = CB\nAnnuler = Espèces');
-    resolve(result ? 'card' : 'cash');
+    const modal = document.getElementById('paymentChoiceModal');
+    const cardBtn = document.getElementById('choiceCardBtn');
+    const cashBtn = document.getElementById('choiceCashBtn');
+    
+    // Fonction pour nettoyer les listeners
+    const cleanup = () => {
+      cardBtn.replaceWith(cardBtn.cloneNode(true));
+      cashBtn.replaceWith(cashBtn.cloneNode(true));
+    };
+    
+    // Event listeners
+    document.getElementById('choiceCardBtn').onclick = () => {
+      modal.close();
+      cleanup();
+      resolve('card');
+    };
+    
+    document.getElementById('choiceCashBtn').onclick = () => {
+      modal.close();
+      cleanup();
+      resolve('cash');
+    };
+    
+    // Si fermeture sans choix, on annule
+    modal.addEventListener('close', () => {
+      cleanup();
+      resolve(null);
+    }, { once: true });
+    
+    modal.showModal();
   });
 }
 
@@ -1447,7 +1528,7 @@ function renderStockTable() {
   
   let filtered = allProducts;
   if (currentStockCategoryFilter !== 'all') {
-    filtered = allProducts.filter(p => p.categorie === currentStockCategoryFilter);
+    filtered = allProducts.filter(p => p.category === currentStockCategoryFilter);
   }
 
   if (filtered.length === 0) {
@@ -1457,7 +1538,7 @@ function renderStockTable() {
 
   const html = filtered.map(product => {
     const isAvailable = product.disponible !== false;
-    const categoryName = allCategories.find(c => c.id === product.categorie)?.name || product.categorie;
+    const categoryName = allCategories.find(c => c.id === product.category)?.name || product.category;
 
     return `
       <tr>

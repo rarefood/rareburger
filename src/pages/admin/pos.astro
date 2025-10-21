@@ -488,26 +488,43 @@ if (!hasAccess) {
 
       <div class="divider"></div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-control">
-          <label class="label">
-            <span class="label-text font-bold">Changer le statut</span>
-          </label>
-          <select id="modalOrderStatut" class="select select-bordered select-lg">
-            <option value="nouvelle">🆕 Nouvelle</option>
-            <option value="en_preparation">👨‍🍳 En préparation</option>
-            <option value="prete">✅ Prête</option>
-            <option value="en_livraison">🚚 En livraison</option>
-            <option value="terminee">✔️ Terminée</option>
-          </select>
-        </div>
+    <!-- Impression ticket -->
+    <div class="mb-4">
+      <button id="printTicketBtn" class="btn btn-accent btn-lg btn-block">
+       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+       </svg>
+       🖨️ Imprimer le ticket
+      </button>
+    </div>
 
-        <div class="flex items-end">
-          <button id="confirmOrderStatus" class="btn btn-primary btn-lg btn-block">
-            Confirmer le changement
-          </button>
-        </div>
+    <div class="divider"></div>
+
+       <!-- Actions -->
+     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+  
+      <!-- Changer statut -->
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text font-bold">Changer le statut</span>
+        </label>
+        <select id="modalOrderStatut" class="select select-bordered select-lg">
+          <option value="nouvelle">🆕 Nouvelle</option>
+          <option value="en_preparation">👨‍🍳 En préparation</option>
+          <option value="prete">✅ Prête</option>
+          <option value="en_livraison">🚚 En livraison</option>
+          <option value="terminee">✔️ Terminée</option>
+        </select>
       </div>
+
+      <!-- Bouton confirmer -->
+      <div class="flex items-end">
+        <button id="confirmOrderStatus" class="btn btn-primary btn-lg btn-block">
+          Confirmer le changement
+        </button>
+      </div>
+
+    </div>
     </div>
     <form method="dialog" class="modal-backdrop">
       <button>close</button>
@@ -834,9 +851,11 @@ window.openProductModal = function(productId) {
   document.getElementById('modalProductDescription').textContent = product.description || '';
   document.getElementById('modalProductPrice').textContent = formatPrice(product.prix);
   
-  const imageUrl = product.image ? api.images.getUrl(product.image) : '/placeholder.jpg';
+  // ✅ FIX
+  const imageUrl = product.images && product.images[0] 
+    ? api.images.getUrl(product.images[0]) 
+    : 'https://via.placeholder.com/400/e5e7eb/6b7280?text=Pas+d\'image';
   document.getElementById('modalProductImage').src = imageUrl;
-
   document.getElementById('modalQuantity').value = 1;
   document.getElementById('modalInstructions').value = '';
 
@@ -1173,8 +1192,16 @@ async function finalizeOrder(paymentMode) {
     // Vider le panier
     currentCart = [];
     updateCartDisplay();
+    
+    // ✅ FIX : Réinitialiser TOUT le formulaire
     document.getElementById('orderNotes').value = '';
     document.getElementById('tableNumber').value = '';
+    
+    // Réinitialiser le type à "sur_place" par défaut
+    document.getElementById('orderType').value = 'sur_place';
+    
+    // Trigger l'événement change pour synchroniser l'affichage du champ table
+    document.getElementById('orderType').dispatchEvent(new Event('change'));
 
   } catch (error) {
     console.error('❌ Erreur création commande:', error);
@@ -1348,9 +1375,81 @@ window.openOrderDetailModal = function(commandeId) {
   }
 
   document.getElementById('modalOrderStatut').value = commande.statut;
+  const printBtn = document.getElementById('printTicketBtn');
+  printBtn.onclick = () => printOrderTicket(commande);
 
   orderDetailModal.showModal();
 };
+
+// ==========================================
+// 🖨️ IMPRESSION TICKET (SIMULATION)
+// ==========================================
+function printOrderTicket(commande) {
+  console.log('🖨️ ========================================');
+  console.log('🖨️ IMPRESSION TICKET - SIMULATION');
+  console.log('🖨️ ========================================');
+  console.log('');
+  console.log(`   ${commande.numero}`);
+  console.log(`   ${new Date(commande.date_creation.replace('+00:00Z', 'Z')).toLocaleString('fr-BE')}`);
+  console.log('');
+  console.log('   Type:', commande.type);
+  if (commande.numero_table) {
+    console.log('   Table:', commande.numero_table);
+  }
+  console.log('');
+  console.log('   Client:', `${commande.client?.prenom || ''} ${commande.client?.nom || ''}`);
+  if (commande.client?.telephone) {
+    console.log('   Tel:', commande.client.telephone);
+  }
+  console.log('');
+  console.log('   ----------------------------------------');
+  console.log('   ARTICLES:');
+  console.log('   ----------------------------------------');
+  
+  commande.articles.forEach(article => {
+    console.log(`   ${article.quantite}x ${article.nom}`);
+    if (article.supplements && article.supplements.length > 0) {
+      console.log(`      + ${article.supplements.map(s => s.name).join(', ')}`);
+    }
+    if (article.removed_ingredients && article.removed_ingredients.length > 0) {
+      console.log(`      Sans: ${article.removed_ingredients.join(', ')}`);
+    }
+    if (article.instructions) {
+      console.log(`      Note: ${article.instructions}`);
+    }
+  });
+  
+  console.log('   ----------------------------------------');
+  if (commande.notes) {
+    console.log('');
+    console.log('   💬 INSTRUCTIONS:');
+    console.log(`   ${commande.notes}`);
+    console.log('');
+    console.log('   ----------------------------------------');
+  }
+  console.log('');
+  console.log(`   TOTAL: ${formatPrice(commande.prix_total)}`);
+  console.log('');
+  console.log('🖨️ ========================================');
+  console.log('');
+  
+  // TODO: Implémenter impression Epson POS
+  // Endpoint backend à créer: POST /api/print-ticket
+  // Données à envoyer: { commande_id: commande.id }
+  
+  showToast('🖨️ Impression simulée (voir console)', 'info');
+  
+  // Feedback visuel
+  const printBtn = document.getElementById('printTicketBtn');
+  const originalText = printBtn.innerHTML;
+  printBtn.innerHTML = '✅ Imprimé !';
+  printBtn.disabled = true;
+  
+  setTimeout(() => {
+    printBtn.innerHTML = originalText;
+    printBtn.disabled = false;
+  }, 2000);
+}
 
 // Confirmer changement statut
 document.getElementById('confirmOrderStatus').addEventListener('click', async () => {
@@ -1546,7 +1645,7 @@ function renderStockTable() {
           <div class="flex items-center gap-3">
             <div class="avatar">
               <div class="mask mask-squircle h-12 w-12">
-                <img src="${product.image ? api.images.getUrl(product.image) : '/placeholder.jpg'}" alt="${product.nom}" />
+               <img src="${product.images && product.images[0] ? api.images.getUrl(product.images[0]) : 'https://via.placeholder.com/400/e5e7eb/6b7280?text=Pas+d\'image'}" alt="${product.nom}" />
               </div>
             </div>
             <div class="font-bold">${product.nom}</div>
@@ -1602,8 +1701,24 @@ function formatPrice(price) {
 }
 
 function getTimeElapsed(dateStr) {
+  if (!dateStr) return { text: "Date inconnue", urgent: false };
+  
+  // ✅ FIX : Nettoyer le format de date invalide du backend
+  // Enlever le Z en trop si la date contient déjà +00:00
+  let cleanDateStr = dateStr;
+  if (dateStr.includes('+00:00Z')) {
+    cleanDateStr = dateStr.replace('+00:00Z', 'Z');
+  }
+  
   const now = new Date();
-  const orderDate = new Date(dateStr);
+  const orderDate = new Date(cleanDateStr);
+  
+  // Vérifier si la date est valide
+  if (isNaN(orderDate.getTime())) {
+    console.error('❌ Date invalide:', dateStr);
+    return { text: "Date invalide", urgent: false };
+  }
+  
   const diffMs = now - orderDate;
   const diffMins = Math.floor(diffMs / 60000);
   
@@ -1614,9 +1729,9 @@ function getTimeElapsed(dateStr) {
   if (diffMins < 60) return { text: `Il y a ${diffMins} min ⚠️`, urgent: true };
   
   const diffHours = Math.floor(diffMins / 60);
-  return { text: `Il y a ${diffHours}h${diffMins % 60}`, urgent: true };
+  const remainingMins = diffMins % 60;
+  return { text: `Il y a ${diffHours}h${String(remainingMins).padStart(2, '0')}`, urgent: true };
 }
-
 function getTypeInfo(type) {
   const types = {
     'sur_place': { icon: '🍽️', badge: 'badge-success', label: 'Sur place' },

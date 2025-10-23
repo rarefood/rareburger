@@ -12,6 +12,7 @@ const LOGIN_PATHS = new Set([
 
 // Routes protégées et leurs permissions requises
 const PROTECTED_ROUTES: Record<string, string[]> = {
+  '/admin/pos': ['admin', 'chef', 'caissier'],
   '/admin': ['admin'],
   '/cuisine': ['admin', 'chef'],
   '/livraison': ['admin', 'livreur'],
@@ -132,6 +133,8 @@ export const onRequest: MiddlewareHandler = async (ctx, next) => {
         return redirect('/cuisine', 302);
       } else if (userRoles.includes('livreur')) {
         return redirect('/livraison', 302);
+      } else if (userRoles.includes('caissier')) {  // ✅ NOUVEAU
+        return redirect('/admin/pos', 302);
       } else {
         // Aucun rôle valide = déconnexion
         cookies.delete(AUTH_COOKIE, { path: '/' });

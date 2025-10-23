@@ -14,7 +14,9 @@ if (!user) {
 }
 
 // Vérifier que l'utilisateur a les droits (admin ou chef)
-const hasAccess = user.roles?.includes('admin') || user.roles?.includes('chef');
+const hasAccess = user.roles?.includes('admin') 
+  || user.roles?.includes('chef') 
+  || user.roles?.includes('caissier');  // ✅ NOUVEAU
 if (!hasAccess) {
   return Astro.redirect('/login');
 }

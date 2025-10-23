@@ -801,7 +801,7 @@ window.deleteEmploye = async function(type, id) {
   delete configData[pluralTypes[type]][id];
   
   try {
-    await fetch(`https://api.cmdola.be/api/$config`, {
+    await fetch(`https://api.rareburger.be/api/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(configData)
@@ -848,7 +848,7 @@ document.getElementById('saveEmployeBtn').addEventListener('click', async () => 
   };
   
   try {
-    await fetch(`https://api.cmdola.be/api/$config`, {
+    await fetch(`https://api.rareburger.be/api/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(configData)

@@ -108,8 +108,6 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
     <!-- Section Services -->
     <div id="sectionServices" class="hidden">
-      
-      <!-- Modes de service -->
       <div class="card bg-base-100 shadow-lg mb-6">
         <div class="card-body">
           <h2 class="card-title">Modes de service</h2>
@@ -123,19 +121,18 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
         </div>
       </div>
 
-      <!-- Zones de livraison -->
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="card-title">Zones de livraison</h2>
-            <button class="btn btn-sm btn-primary" id="addZoneBtn">Ajouter zone</button>
-          </div>
+          <h2 class="card-title">Zones de livraison</h2>
           
           <div class="space-y-3" id="zonesContainer">
           </div>
+
+          <div class="mt-4">
+            <button class="btn btn-sm btn-ghost" id="addZoneBtn">+ Ajouter une zone</button>
+          </div>
         </div>
       </div>
-
     </div>
 
     <!-- Section Paiements -->
@@ -155,65 +152,49 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
     </div>
 
     <!-- Section Employés -->
-<div id="sectionEmployes" class="hidden">
-  
-  <!-- Chefs -->
-  <div class="card bg-base-100 shadow-lg mb-6">
-    <div class="card-body">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="card-title">👨‍🍳 Chefs de cuisine</h2>
-        <button class="btn btn-primary btn-sm" onclick="openAddEmployeModal('chef')">
-          + Ajouter un chef
-        </button>
+    <div id="sectionEmployes" class="hidden">
+      
+      <!-- Chefs -->
+      <div class="card bg-base-100 shadow-lg mb-6">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">👨‍🍳 Chefs de cuisine</h2>
+            <button class="btn btn-sm btn-primary" onclick="openAddEmployeModal('chef')">Ajouter</button>
+          </div>
+          <div class="space-y-2" id="chefsContainer"></div>
+        </div>
       </div>
-      <div class="space-y-2" id="chefsContainer">
-        <!-- Rempli par JS -->
-      </div>
-    </div>
-  </div>
 
-  <!-- Livreurs -->
-  <div class="card bg-base-100 shadow-lg mb-6">
-    <div class="card-body">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="card-title">🚚 Livreurs</h2>
-        <button class="btn btn-primary btn-sm" onclick="openAddEmployeModal('livreur')">
-          + Ajouter un livreur
-        </button>
+      <!-- Livreurs -->
+      <div class="card bg-base-100 shadow-lg mb-6">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">🚚 Livreurs</h2>
+            <button class="btn btn-sm btn-primary" onclick="openAddEmployeModal('livreur')">Ajouter</button>
+          </div>
+          <div class="space-y-2" id="livreursContainer"></div>
+        </div>
       </div>
-      <div class="space-y-2" id="livreursContainer">
-        <!-- Rempli par JS -->
-      </div>
-    </div>
-  </div>
 
-  <!-- Caissiers -->
-  <div class="card bg-base-100 shadow-lg">
-      <div class="card-body">
-        <div class="flex justify-between items-center mb-4">
-         <h2 class="card-title">💰 Caissiers</h2>
-          <button class="btn btn-primary btn-sm" onclick="openAddEmployeModal('caissier')">
-            + Ajouter un caissier
-          </button>
-        </div>
-        <div class="alert alert-info mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span class="text-sm">Interface caisse en développement</span>
-        </div>
-        <div class="space-y-2" id="caissiersContainer">
-          <!-- Rempli par JS -->
+      <!-- Caissiers -->
+      <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">💰 Caissiers</h2>
+            <button class="btn btn-sm btn-primary" onclick="openAddEmployeModal('caissier')">Ajouter</button>
+          </div>
+          <div class="space-y-2" id="caissiersContainer"></div>
         </div>
       </div>
+
     </div>
-  </div>
 
     <!-- Section Thème -->
     <div id="sectionTheme" class="hidden">
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
-          <h2 class="card-title">Apparence & Thème</h2>
+          <h2 class="card-title">Apparence</h2>
+          
           <div class="form-control">
             <label class="label"><span class="label-text">Thème DaisyUI</span></label>
             <select id="themeDaisy" class="select select-bordered">
@@ -246,17 +227,11 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
               <option value="night">Night</option>
               <option value="coffee">Coffee</option>
               <option value="winter">Winter</option>
-              <option value="dim">Dim</option>
-              <option value="nord">Nord</option>
-              <option value="sunset">Sunset</option>
-              <option value="caramellatte">Caramellatte</option>
-              <option value="abyss">Abyss</option>
-              <option value="silk">Silk</option>
             </select>
           </div>
 
           <div class="form-control mt-4">
-            <label class="label"><span class="label-text">Logo (upload)</span></label>
+            <label class="label"><span class="label-text">Logo</span></label>
             <input type="file" id="logoUpload" class="file-input file-input-bordered" accept="image/*" />
             <div class="mt-2">
               <img id="logoPreview" class="w-24 h-24 object-cover rounded" />
@@ -548,117 +523,117 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
   }
 
   async function saveConfig(section) {
-  try {
-    await api.config.update(configData);
-    alert('Configuration enregistrée avec succès');
-    
-    if (section === 'securite') {
-      localStorage.removeItem('admin_token');
-      document.cookie = 'admin_token=; path=/; max-age=0';
-      window.location.href = '/admin';
-    }
-  } catch (error) {
-    console.error('Erreur:', error);
-    alert('Erreur lors de la sauvegarde');
-  }
-}
-
-document.getElementById('saveInfosBtn').addEventListener('click', () => {
-  configData.nom = document.getElementById('nom').value;
-  configData.telephone = document.getElementById('telephone').value;
-  configData.email = document.getElementById('email').value;
-  configData.description = document.getElementById('description').value;
-  configData.adresse = document.getElementById('adresse').value;
-  
-  if (!configData.reseaux_sociaux) configData.reseaux_sociaux = {};
-  configData.reseaux_sociaux.instagram = document.getElementById('instagram').value;
-  configData.reseaux_sociaux.facebook = document.getElementById('facebook').value;
-  
-  saveConfig('infos');
-});
-
-document.getElementById('saveHorairesBtn').addEventListener('click', () => {
-  saveConfig('horaires');
-});
-
-document.getElementById('saveServicesBtn').addEventListener('click', () => {
-  if (!configData.modes_service) configData.modes_service = {};
-  
-  ['sur_place', 'emporter', 'livraison'].forEach(key => {
-    configData.modes_service[key] = {
-      active: document.getElementById(`service-${key}`).checked,
-      label: document.getElementById(`service-label-${key}`).value,
-      icon: document.getElementById(`service-icon-${key}`).value,
-      description: document.getElementById(`service-desc-${key}`).value
-    };
-  });
-  
-  saveConfig('services');
-});
-
-document.getElementById('savePaiementsBtn').addEventListener('click', () => {
-  if (!configData.methodes_paiement) configData.methodes_paiement = {};
-  
-  ['comptoir', 'reception', 'en_ligne'].forEach(key => {
-    configData.methodes_paiement[key] = {
-      active: document.getElementById(`paiement-${key}`).checked,
-      label: document.getElementById(`paiement-label-${key}`).value,
-      icon: document.getElementById(`paiement-icon-${key}`).value
-    };
-  });
-  
-  saveConfig('paiements');
-});
-
-document.getElementById('saveThemeBtn').addEventListener('click', async () => {
-  if (!configData.theme) configData.theme = {};
-  configData.theme.daisy = document.getElementById('themeDaisy').value;
-  
-  const logoFile = document.getElementById('logoUpload').files[0];
-  if (logoFile) {
     try {
-      const uploadData = await api.images.upload(logoFile);
-      configData.theme.logo = uploadData.filename;
+      await api.config.update(configData);
+      alert('Configuration enregistrée avec succès');
+      
+      if (section === 'securite') {
+        localStorage.removeItem('admin_token');
+        document.cookie = 'admin_token=; path=/; max-age=0';
+        window.location.href = '/admin';
+      }
     } catch (error) {
-      console.error('Erreur upload logo:', error);
+      console.error('Erreur:', error);
+      alert('Erreur lors de la sauvegarde');
     }
   }
-  
-  saveConfig('theme');
-});
 
-document.getElementById('saveSecuriteBtn').addEventListener('click', () => {
-  const newPass = document.getElementById('newPassword').value;
-  const confirmPass = document.getElementById('confirmPassword').value;
-  
-  if (newPass && newPass !== confirmPass) {
-    alert('Les mots de passe ne correspondent pas');
-    return;
-  }
-  
-  if (!configData.admin) configData.admin = {};
-  configData.admin.username = document.getElementById('username').value;
-  
-  if (newPass) {
-    configData.admin.password = newPass;
-  }
-  
-  saveConfig('securite');
-});
-
-// Tabs navigation
-const tabs = ['Infos', 'Horaires', 'Services', 'Paiements', 'Employes', 'Theme', 'Securite'];
-tabs.forEach(tab => {
-  document.getElementById(`tab${tab}`).addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
-    document.getElementById(`tab${tab}`).classList.add('tab-active');
+  document.getElementById('saveInfosBtn').addEventListener('click', () => {
+    configData.nom = document.getElementById('nom').value;
+    configData.telephone = document.getElementById('telephone').value;
+    configData.email = document.getElementById('email').value;
+    configData.description = document.getElementById('description').value;
+    configData.adresse = document.getElementById('adresse').value;
     
-    tabs.forEach(t => {
-      document.getElementById(`section${t}`).classList.add('hidden');
-    });
-    document.getElementById(`section${tab}`).classList.remove('hidden');
+    if (!configData.reseaux_sociaux) configData.reseaux_sociaux = {};
+    configData.reseaux_sociaux.instagram = document.getElementById('instagram').value;
+    configData.reseaux_sociaux.facebook = document.getElementById('facebook').value;
+    
+    saveConfig('infos');
   });
-});
+
+  document.getElementById('saveHorairesBtn').addEventListener('click', () => {
+    saveConfig('horaires');
+  });
+
+  document.getElementById('saveServicesBtn').addEventListener('click', () => {
+    if (!configData.modes_service) configData.modes_service = {};
+    
+    ['sur_place', 'emporter', 'livraison'].forEach(key => {
+      configData.modes_service[key] = {
+        active: document.getElementById(`service-${key}`).checked,
+        label: document.getElementById(`service-label-${key}`).value,
+        icon: document.getElementById(`service-icon-${key}`).value,
+        description: document.getElementById(`service-desc-${key}`).value
+      };
+    });
+    
+    saveConfig('services');
+  });
+
+  document.getElementById('savePaiementsBtn').addEventListener('click', () => {
+    if (!configData.methodes_paiement) configData.methodes_paiement = {};
+    
+    ['comptoir', 'reception', 'en_ligne'].forEach(key => {
+      configData.methodes_paiement[key] = {
+        active: document.getElementById(`paiement-${key}`).checked,
+        label: document.getElementById(`paiement-label-${key}`).value,
+        icon: document.getElementById(`paiement-icon-${key}`).value
+      };
+    });
+    
+    saveConfig('paiements');
+  });
+
+  document.getElementById('saveThemeBtn').addEventListener('click', async () => {
+    if (!configData.theme) configData.theme = {};
+    configData.theme.daisy = document.getElementById('themeDaisy').value;
+    
+    const logoFile = document.getElementById('logoUpload').files[0];
+    if (logoFile) {
+      try {
+        const uploadData = await api.images.upload(logoFile);
+        configData.theme.logo = uploadData.filename;
+      } catch (error) {
+        console.error('Erreur upload logo:', error);
+      }
+    }
+    
+    saveConfig('theme');
+  });
+
+  document.getElementById('saveSecuriteBtn').addEventListener('click', () => {
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    
+    if (newPass && newPass !== confirmPass) {
+      alert('Les mots de passe ne correspondent pas');
+      return;
+    }
+    
+    if (!configData.admin) configData.admin = {};
+    configData.admin.username = document.getElementById('username').value;
+    
+    if (newPass) {
+      configData.admin.password = newPass;
+    }
+    
+    saveConfig('securite');
+  });
+
+  // Tabs navigation
+  const tabs = ['Infos', 'Horaires', 'Services', 'Paiements', 'Employes', 'Theme', 'Securite'];
+  tabs.forEach(tab => {
+    document.getElementById(`tab${tab}`).addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+      document.getElementById(`tab${tab}`).classList.add('tab-active');
+      
+      tabs.forEach(t => {
+        document.getElementById(`section${t}`).classList.add('hidden');
+      });
+      document.getElementById(`section${tab}`).classList.remove('hidden');
+    });
+  });
 
 let currentEmployeType = null;
 let currentEmployeId = null;
@@ -742,6 +717,7 @@ function renderCaissiers() {
             <div class="text-sm text-base-content/60">@${caissier.username}</div>
           </div>
           <div class="flex gap-2">
+            <button class="btn btn-sm btn-ghost" onclick="editEmploye('caissier', '${id}')">✏️</button>
             <button class="btn btn-sm btn-ghost text-error" onclick="deleteEmploye('caissier', '${id}')">🗑️</button>
           </div>
         </div>
@@ -791,7 +767,7 @@ window.editEmploye = function(type, id) {
   employeModal.showModal();
 };
 
-// Supprimer employé
+// ✅ CORRIGÉ: Supprimer employé AVEC api.config.update()
 window.deleteEmploye = async function(type, id) {
   const pluralTypes = { 'chef': 'chefs', 'livreur': 'livreurs', 'caissier': 'caissiers' };
   const employe = configData[pluralTypes[type]][id];
@@ -801,12 +777,7 @@ window.deleteEmploye = async function(type, id) {
   delete configData[pluralTypes[type]][id];
   
   try {
-    await fetch(`https://api.rareburger.be/api/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(configData)
-    });
-    
+    await api.config.update(configData);  // ✅ Utilise api.ts au lieu de fetch direct
     renderEmployes();
     alert('Employé supprimé');
   } catch (error) {
@@ -815,7 +786,7 @@ window.deleteEmploye = async function(type, id) {
   }
 };
 
-// Sauvegarder employé
+// ✅ CORRIGÉ: Sauvegarder employé AVEC api.config.update()
 document.getElementById('saveEmployeBtn').addEventListener('click', async () => {
   const nom = document.getElementById('employeNom').value.trim();
   const username = document.getElementById('employeUsername').value.trim();
@@ -848,12 +819,7 @@ document.getElementById('saveEmployeBtn').addEventListener('click', async () => 
   };
   
   try {
-    await fetch(`https://api.rareburger.be/api/config`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(configData)
-    });
-    
+    await api.config.update(configData);  // ✅ Utilise api.ts au lieu de fetch direct
     employeModal.close();
     renderEmployes();
     alert('Employé enregistré');

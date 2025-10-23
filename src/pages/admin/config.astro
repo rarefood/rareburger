@@ -339,14 +339,16 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
 
 </AdminLayout>
 
-<script define:vars={{ RESTAURANT_ID }}>
+<script>
+  import { api } from '../../lib/api';
+  
+  const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burger';
   let configData = {};
   const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
 
   async function loadConfig() {
     try {
-      const response = await fetch(`https://api.cmdola.be/api/$config`);
-      configData = await response.json();
+      configData = await api.config.get();
       populateAllSections();
       document.getElementById('loader').classList.add('hidden');
       document.getElementById('configContent').classList.remove('hidden');
@@ -536,7 +538,7 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
     document.getElementById('themeDaisy').value = configData.theme?.daisy || 'autumn';
     
     if (configData.theme?.logo) {
-      const logoUrl = `https://api.cmdola.be/api/images/$${configData.theme.logo}`;
+      const logoUrl = api.images.getUrl(configData.theme.logo);
       document.getElementById('logoPreview').src = logoUrl;
     }
   }
@@ -546,121 +548,105 @@ const RESTAURANT_ID = import.meta.env.PUBLIC_DEFAULT_RESTAURANT_ID || 'rare-burg
   }
 
   async function saveConfig(section) {
-    try {
-      const response = await fetch(`https://api.cmdola.be/api/$config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configData)
-      });
+  try {
+    await api.config.update(configData);
+    alert('Configuration enregistrée avec succès');
+    
+    if (section === 'securite') {
+      localStorage.removeItem('admin_token');
+      document.cookie = 'admin_token=; path=/; max-age=0';
+      window.location.href = '/admin';
+    }
+  } catch (error) {
+    console.error('Erreur:', error);
+    alert('Erreur lors de la sauvegarde');
+  }
+}
 
-      if (response.ok) {
-        alert('Configuration enregistrée avec succès');
-        if (section === 'securite') {
-          localStorage.removeItem('admin_token');
-          document.cookie = 'admin_token=; path=/; max-age=0';
-          window.location.href = '/admin';
-        }
-      } else {
-        throw new Error('Erreur sauvegarde');
-      }
+document.getElementById('saveInfosBtn').addEventListener('click', () => {
+  configData.nom = document.getElementById('nom').value;
+  configData.telephone = document.getElementById('telephone').value;
+  configData.email = document.getElementById('email').value;
+  configData.description = document.getElementById('description').value;
+  configData.adresse = document.getElementById('adresse').value;
+  
+  if (!configData.reseaux_sociaux) configData.reseaux_sociaux = {};
+  configData.reseaux_sociaux.instagram = document.getElementById('instagram').value;
+  configData.reseaux_sociaux.facebook = document.getElementById('facebook').value;
+  
+  saveConfig('infos');
+});
+
+document.getElementById('saveHorairesBtn').addEventListener('click', () => {
+  saveConfig('horaires');
+});
+
+document.getElementById('saveServicesBtn').addEventListener('click', () => {
+  if (!configData.modes_service) configData.modes_service = {};
+  
+  ['sur_place', 'emporter', 'livraison'].forEach(key => {
+    configData.modes_service[key] = {
+      active: document.getElementById(`service-${key}`).checked,
+      label: document.getElementById(`service-label-${key}`).value,
+      icon: document.getElementById(`service-icon-${key}`).value,
+      description: document.getElementById(`service-desc-${key}`).value
+    };
+  });
+  
+  saveConfig('services');
+});
+
+document.getElementById('savePaiementsBtn').addEventListener('click', () => {
+  if (!configData.methodes_paiement) configData.methodes_paiement = {};
+  
+  ['comptoir', 'reception', 'en_ligne'].forEach(key => {
+    configData.methodes_paiement[key] = {
+      active: document.getElementById(`paiement-${key}`).checked,
+      label: document.getElementById(`paiement-label-${key}`).value,
+      icon: document.getElementById(`paiement-icon-${key}`).value
+    };
+  });
+  
+  saveConfig('paiements');
+});
+
+document.getElementById('saveThemeBtn').addEventListener('click', async () => {
+  if (!configData.theme) configData.theme = {};
+  configData.theme.daisy = document.getElementById('themeDaisy').value;
+  
+  const logoFile = document.getElementById('logoUpload').files[0];
+  if (logoFile) {
+    try {
+      const uploadData = await api.images.upload(logoFile);
+      configData.theme.logo = uploadData.filename;
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la sauvegarde');
+      console.error('Erreur upload logo:', error);
     }
   }
+  
+  saveConfig('theme');
+});
 
-  document.getElementById('saveInfosBtn').addEventListener('click', () => {
-    configData.nom = document.getElementById('nom').value;
-    configData.telephone = document.getElementById('telephone').value;
-    configData.email = document.getElementById('email').value;
-    configData.description = document.getElementById('description').value;
-    configData.adresse = document.getElementById('adresse').value;
-    
-    if (!configData.reseaux_sociaux) configData.reseaux_sociaux = {};
-    configData.reseaux_sociaux.instagram = document.getElementById('instagram').value;
-    configData.reseaux_sociaux.facebook = document.getElementById('facebook').value;
-    
-    saveConfig('infos');
-  });
+document.getElementById('saveSecuriteBtn').addEventListener('click', () => {
+  const newPass = document.getElementById('newPassword').value;
+  const confirmPass = document.getElementById('confirmPassword').value;
+  
+  if (newPass && newPass !== confirmPass) {
+    alert('Les mots de passe ne correspondent pas');
+    return;
+  }
+  
+  if (!configData.admin) configData.admin = {};
+  configData.admin.username = document.getElementById('username').value;
+  
+  if (newPass) {
+    configData.admin.password = newPass;
+  }
+  
+  saveConfig('securite');
+});
 
-  document.getElementById('saveHorairesBtn').addEventListener('click', () => {
-    saveConfig('horaires');
-  });
-
-  document.getElementById('saveServicesBtn').addEventListener('click', () => {
-    if (!configData.modes_service) configData.modes_service = {};
-    
-    ['sur_place', 'emporter', 'livraison'].forEach(key => {
-      configData.modes_service[key] = {
-        active: document.getElementById(`service-${key}`).checked,
-        label: document.getElementById(`service-label-${key}`).value,
-        icon: document.getElementById(`service-icon-${key}`).value,
-        description: document.getElementById(`service-desc-${key}`).value
-      };
-    });
-    
-    saveConfig('services');
-  });
-
-  document.getElementById('savePaiementsBtn').addEventListener('click', () => {
-    if (!configData.methodes_paiement) configData.methodes_paiement = {};
-    
-    ['comptoir', 'reception', 'en_ligne'].forEach(key => {
-      configData.methodes_paiement[key] = {
-        active: document.getElementById(`paiement-${key}`).checked,
-        label: document.getElementById(`paiement-label-${key}`).value,
-        icon: document.getElementById(`paiement-icon-${key}`).value
-      };
-    });
-    
-    saveConfig('paiements');
-  });
-
-  document.getElementById('saveThemeBtn').addEventListener('click', async () => {
-    if (!configData.theme) configData.theme = {};
-    configData.theme.daisy = document.getElementById('themeDaisy').value;
-    
-    const logoFile = document.getElementById('logoUpload').files[0];
-    if (logoFile) {
-      const formData = new FormData();
-      formData.append('image', logoFile);
-      
-      try {
-        const uploadResponse = await fetch(`https://api.cmdola.be/api/$upload-image`, {
-          method: 'POST',
-          body: formData
-        });
-        const uploadData = await uploadResponse.json();
-        configData.theme.logo = uploadData.filename;
-      } catch (error) {
-        console.error('Erreur upload logo:', error);
-      }
-    }
-    
-    saveConfig('theme');
-  });
-
-  document.getElementById('saveSecuriteBtn').addEventListener('click', () => {
-    const newPass = document.getElementById('newPassword').value;
-    const confirmPass = document.getElementById('confirmPassword').value;
-    
-    if (newPass && newPass !== confirmPass) {
-      alert('Les mots de passe ne correspondent pas');
-      return;
-    }
-    
-    if (!configData.admin) configData.admin = {};
-    configData.admin.username = document.getElementById('username').value;
-    
-    if (newPass) {
-      configData.admin.password = newPass;
-    }
-    
-    saveConfig('securite');
-  });
-
-  // Tabs navigation
-  // Tabs navigation
+// Tabs navigation
 const tabs = ['Infos', 'Horaires', 'Services', 'Paiements', 'Employes', 'Theme', 'Securite'];
 tabs.forEach(tab => {
   document.getElementById(`tab${tab}`).addEventListener('click', () => {
